@@ -1,0 +1,2 @@
+GET {{KISSKHURL}}/api/DramaList/Drama/12522
+HTTP 200

@@ -1,0 +1,56 @@
+# Dockerignore for lumix
+# Exclude development dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Exclude test files
+coverage/
+.nyc_output
+
+# Exclude source control
+.git/
+.gitignore
+.gitattributes
+
+# Exclude development files and secrets
+.env
+.env.local
+.env.*.local
+
+# Exclude IDE files
+.vscode/
+.zcode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Exclude OS files
+.DS_Store
+Thumbs.db
+
+# Exclude logs
+logs/
+*.log
+
+# Exclude runtime data
+tmp/
+pids/
+*.db
+*.pid
+*.seed
+*.pid.lock
+
+# Exclude documentation
+README.md
+CHANGELOG.md
+LICENSE
+
+# Exclude Docker files
+Dockerfile*
+docker-compose*
+.dockerignore
+
+data

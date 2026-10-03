@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>lumix</title>
+    <meta name="description"
+        content="Stream dramas, series and movies">
+    </meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="og:type" content="website">
+    <meta name="og:title" content="lumix">
+    <meta name="og:description"
+        content="Stream dramas, series, and movies.">
+    </meta>
+    <meta name="twitter:title" content="lumix">
+    <meta name="twitter:description"
+        content="Stream dramas, series and movies. Choose your mirrors and Explore categories.">
+    </meta>
+    <link rel="icon" type="image/svg+xml" href="/img/lumix.svg">
+    <link rel="icon" type="image/x-icon" href="/img/lumix.ico">
+    <link rel="stylesheet" href="/css/style.css?v={{CSS_HASH}}">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Title -->
+        <header id="title">
+            <div class="brand">
+                <span class="brand-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M8.58 5.25H10.93A1.31 1.31 0 0 1 12.24 6.56V17.44A1.31 1.31 0 0 1 10.93 18.75H8.58A1.31 1.31 0 0 1 7.27 17.44V6.56A1.31 1.31 0 0 1 8.58 5.25Z" />
+                        <path d="M9.14 12.3 16.73 15.53 9.14 18.75Z" />
+                    </svg>
+                </span>
+                <h1>lumix</h1>
+                <span class="version">v{{VERSION}}</span>
+            </div>
+            <p class="tagline">Stremio addon for dramas, series &amp; movies.{{TMDB_TAGLINE}}</p>
+        </header>
+
+        <!-- Configure -->
+        <form id="configureForm">
+            <section class="configure">
+                <h3 class="configure-type">Provider</h3>
+                <!-- Tab bar: one tab per provider, each provider owns its panel -->
+                <div class="tabs" id="provider-tabs" role="tablist">
+                    <button type="button" class="tab active" data-tab="kisskh" role="tab">kisskh</button>
+                </div>
+
+                <!-- kisskh panel -->
+                <div class="tab-panel active" id="tab-kisskh" data-provider="kisskh">
+                    <!-- Mirrors: an ordered fallback list, first is tried first -->
+                    <fieldset class="config-group" id="kisskh-mirrors-group">
+                        <legend>Mirrors</legend>
+                        <p class="hint">At least one required · tried top to bottom ·
+                            failed mirrors are retried after 10 min</p>
+                        <ol class="mirror-order" id="mirror-order"></ol>
+                        <p class="hint" id="mirror-more-label" hidden>More mirrors · tap to add as a fallback</p>
+                        <div class="chip-grid" id="mirror-more"></div>
+                        <div class="mirror-add">
+                            <input type="text" id="mirror-input" placeholder="kisskh.example.gg"
+                                autocomplete="off" inputmode="url" aria-label="Add a custom mirror URL">
+                            <button type="button" class="paste-btn" data-target="mirror-input">Paste</button>
+                            <button type="button" id="mirror-add-btn" class="copy-btn">Add</button>
+                        </div>
+                        <p class="hint mirror-error" id="mirror-error" role="alert" hidden></p>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="type">
+                        <legend>Type</legend>
+                        <p class="hint">At least one required · "All" selects or clears the tier</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-type-all" value="__all__">
+                                <label class="chip" for="kisskh-type-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-type-tvseries" value="TVSeries">
+                                <label class="chip" for="kisskh-type-tvseries">TV Series</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-type-movies" value="Movies">
+                                <label class="chip" for="kisskh-type-movies">Movies</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-type-anime" value="Anime">
+                                <label class="chip" for="kisskh-type-anime">Anime</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-type-hollywood" value="Hollywood">
+                                <label class="chip" for="kisskh-type-hollywood">Hollywood</label>
+                            </span>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="region">
+                        <legend>Region</legend>
+                        <p class="hint">At least one required · each region adds a series and a movies catalog</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-all" value="__all__">
+                                <label class="chip" for="kisskh-region-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-korean" value="Korean">
+                                <label class="chip" for="kisskh-region-korean">Korean</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-chinese" value="Chinese">
+                                <label class="chip" for="kisskh-region-chinese">Chinese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-japanese" value="Japanese">
+                                <label class="chip" for="kisskh-region-japanese">Japanese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-hongkong" value="Hongkong">
+                                <label class="chip" for="kisskh-region-hongkong">Hongkong</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-thai" value="Thai">
+                                <label class="chip" for="kisskh-region-thai">Thai</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-taiwanese" value="Taiwanese">
+                                <label class="chip" for="kisskh-region-taiwanese">Taiwanese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-philippine" value="Philippine">
+                                <label class="chip" for="kisskh-region-philippine">Philippine</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-indonesian" value="Indonesian">
+                                <label class="chip" for="kisskh-region-indonesian">Indonesian</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-singaporean" value="Singaporean">
+                                <label class="chip" for="kisskh-region-singaporean">Singaporean</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-vietnamese" value="Vietnamese">
+                                <label class="chip" for="kisskh-region-vietnamese">Vietnamese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-turkish" value="Turkish">
+                                <label class="chip" for="kisskh-region-turkish">Turkish</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-indian" value="Indian">
+                                <label class="chip" for="kisskh-region-indian">Indian</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-malaysian" value="Malaysian">
+                                <label class="chip" for="kisskh-region-malaysian">Malaysian</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-region-us" value="US">
+                                <label class="chip" for="kisskh-region-us">United States</label>
+                            </span>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="status">
+                        <legend>Status</legend>
+                        <p class="hint">At least one required · applies to series</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-status-all" value="__all__">
+                                <label class="chip" for="kisskh-status-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-status-ongoing" value="Ongoing">
+                                <label class="chip" for="kisskh-status-ongoing">Ongoing</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-status-completed" value="Completed">
+                                <label class="chip" for="kisskh-status-completed">Completed</label>
+                            </span>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="update">
+                        <legend>Update</legend>
+                        <p class="hint">At least one required · sort order of the selected catalogs</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-update-all" value="__all__">
+                                <label class="chip" for="kisskh-update-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-update-popular" value="Popular">
+                                <label class="chip" for="kisskh-update-popular">Popular</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-update-latest" value="Latest">
+                                <label class="chip" for="kisskh-update-latest">Latest</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="kisskh-update-newest" value="Newest">
+                                <label class="chip" for="kisskh-update-newest">Newest</label>
+                            </span>
+                        </div>
+                    </fieldset>
+                </div>
+            </section>
+        </form>
+
+        <!-- Install -->
+        <div id="install">
+            <div class="grid-btn">
+                <a id="installApp" target="_blank" rel="noopener noreferrer"
+                    class="btn btn-primary">Install Stremio
+                    <svg class="icon">
+                        <use href="/icons.svg#external"></use>
+                    </svg>
+                </a>
+                <a id="installWeb" target="_blank" rel="noopener noreferrer"
+                    class="btn btn-secondary">Install Web
+                    <svg class="icon">
+                        <use href="/icons.svg#external"></use>
+                    </svg>
+                </a>
+            </div>
+            <p id="config-hint" class="config-hint" style="display: none;"></p>
+            <div class="manifest-container">
+                <code class="manifest-url" id="manifestUrl" tabindex="0"></code>
+                <button onclick="copyUrl()" id="copyManifestBtn"
+                    class="copy-btn">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <span style="display: none;" id="defaultConfig">{{DEFAULT_CONFIG}}</span>
+    <script type="application/json" id="defaultMirrors">{{DEFAULT_MIRRORS}}</script>
+    <script src="/js/landing.js?v={{JS_HASH}}"></script>
+</body>
+
+</html>

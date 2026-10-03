@@ -1,0 +1,444 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  color: var(--foreground);
+  --background: #131314;
+  --secondary-background: #202124;
+  --surface: #303134;
+  --border: #3c4043;
+  --foreground: #e8eaed;
+  --secondary-foreground: #9aa0a6;
+  --accent: #8ab4f8;
+  --accent-strong: #aecbfa;
+  --on-accent: #062e6f;
+  --danger: #f87171;
+  --rounded-md: 10px;
+  --rounded-lg: 14px;
+  --xxs: 0.2rem;
+  --xs: 0.5rem;
+  --sm: 0.8rem;
+  --md: 1rem;
+}
+
+/* Any [hidden] element stays hidden even when a class sets display (empty
+   chip grids would otherwise render as a flex box) */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  font-family:
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  background: var(--background);
+  display: flex;
+  justify-content: center;
+}
+
+/* D-pad / keyboard focus must always be visible (TV webviews have no hover) */
+:is(button, a, input, select, textarea, [tabindex]):focus-visible,
+.chip-option input:focus-visible + .chip {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icon {
+  fill: none;
+  margin-left: 0.3rem;
+  vertical-align: -0.1rem;
+  width: 1rem;
+  height: 1rem;
+}
+.btn {
+  text-decoration: none;
+  border: 2px solid transparent;
+  border-radius: var(--rounded-md);
+  padding: 12px 24px;
+  flex: 1;
+  margin-top: var(--md);
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn-primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.btn-secondary {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--foreground);
+}
+.btn-secondary:hover {
+  background: color-mix(in srgb, var(--accent), transparent 85%);
+}
+
+.container {
+  background: var(--background);
+  margin: var(--md) var(--sm);
+  width: 100%;
+  max-width: 40rem;
+  padding: var(--md);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+}
+
+/* Header: left-aligned lockup — glyph, wordmark, version chip */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--xs);
+}
+.brand-glyph {
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 0.7rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brand-glyph svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  /* The universal color rule would win inheritance, so pin the mark to the
+     on-accent ink explicitly */
+  fill: var(--on-accent);
+}
+h1 {
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.version {
+  font-size: 0.85rem;
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2em 0.7em;
+  white-space: nowrap;
+}
+.tagline {
+  color: var(--secondary-foreground);
+  font-size: 1.05rem;
+  margin-top: var(--xs);
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+p {
+  font-size: 1rem;
+  margin-top: 0.5rem;
+}
+p:first-child {
+  margin-top: 0;
+}
+
+/* Configure */
+.configure {
+  background-color: var(--secondary-background);
+  margin-top: var(--md);
+  border: 1px solid var(--border);
+  border-radius: var(--rounded-lg);
+  padding: var(--md);
+}
+
+/* Section labels ("Provider" heading and every fieldset legend) share an
+   accent marker bar */
+.configure-type,
+.config-group legend {
+  display: flex;
+  align-items: center;
+  gap: var(--xs);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.configure-type::before,
+.config-group legend::before {
+  content: "";
+  width: 4px;
+  height: 1.05em;
+  border-radius: 2px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.configure-type:first-child {
+  margin-top: 0;
+}
+.configure-type {
+  margin-top: var(--md);
+}
+
+/* Config groups: one fieldset per setting, hint always visible (no hover) */
+.config-group {
+  border: 0;
+  min-inline-size: auto;
+  margin-top: var(--md);
+}
+.config-group:first-of-type {
+  margin-top: var(--md);
+}
+.config-group legend {
+  padding: 0;
+  text-align: left;
+}
+.config-group .hint {
+  margin-top: var(--xxs);
+}
+.hint {
+  color: var(--secondary-foreground);
+  font-size: 0.95rem;
+  text-align: left;
+}
+
+/* Chip grids: native checkboxes styled as large D-pad-friendly chips */
+.chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--xs);
+  margin-top: var(--xs);
+}
+.chip-option {
+  display: inline-flex;
+}
+.chip-option input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: var(--xs) var(--md);
+  font-family: inherit;
+  font-size: 1.1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+  text-align: center;
+}
+.chip:hover {
+  border-color: var(--accent);
+}
+.chip-option input:checked + .chip {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 78%);
+  color: var(--foreground);
+}
+
+/* Ordered mirrors: numbered fallback list with reorder buttons */
+.mirror-order {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--xs);
+  margin-top: var(--xs);
+}
+.mirror-row {
+  display: flex;
+  align-items: center;
+  gap: var(--xs);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  padding: var(--xxs) var(--xs);
+  min-height: 48px;
+}
+.mirror-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mirror-name {
+  flex: 1;
+  text-align: left;
+  font-size: 1.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mirror-btn {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  font-family: inherit;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.mirror-btn:not(:disabled):hover {
+  border-color: var(--accent);
+}
+.mirror-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Custom mirror input: input and Add button stretch to the same height */
+.mirror-add {
+  display: flex;
+  align-items: stretch;
+  gap: var(--xs);
+  margin-top: var(--xs);
+}
+.mirror-add input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  padding: 0 var(--md);
+  font-size: 1rem;
+}
+.mirror-add input::placeholder {
+  color: var(--secondary-foreground);
+  font-size: 0.95rem;
+}
+/* stretch wins over the shared 44px height so both buttons match the input */
+.mirror-add .copy-btn,
+.mirror-add .paste-btn {
+  height: auto;
+}
+.mirror-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Provider tabs */
+.tabs {
+  display: flex;
+  gap: var(--xs);
+  margin-top: var(--md);
+}
+.tab {
+  flex: 1;
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  padding: var(--xs) var(--md);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 1.1em;
+  font-weight: 600;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+  min-height: 48px;
+}
+.tab:hover {
+  border-color: var(--accent);
+}
+.tab.active {
+  color: var(--on-accent);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.tab-panel {
+  display: none;
+}
+.tab-panel.active {
+  display: block;
+}
+.config-hint {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Install */
+.grid-btn {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.2rem;
+}
+
+/* Manifest Url: bordered box with the Copy button inside; the URL wraps so
+   nothing is hidden behind the button */
+.manifest-container {
+  margin-top: 1rem;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  padding: var(--xxs);
+  display: flex;
+  align-items: center;
+  gap: var(--xxs);
+  min-height: 56px;
+}
+.manifest-url {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  /* Match the page text: <code> would otherwise render small monospace */
+  font-family: inherit;
+  font-size: 1rem;
+  /* Wrap the (base64) URL across lines instead of scrolling horizontally */
+  white-space: normal;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.copy-btn,
+.paste-btn {
+  background: color-mix(in srgb, var(--accent), transparent 75%);
+  height: 44px;
+  flex-shrink: 0;
+  border: 2px solid var(--accent);
+  border-radius: var(--rounded-md);
+  padding: 0 var(--md);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 1em;
+  font-weight: 600;
+  transition: background 0.2s ease;
+  white-space: nowrap;
+}
+.copy-btn:hover,
+.paste-btn:hover {
+  background: color-mix(in srgb, var(--accent), transparent 55%);
+}

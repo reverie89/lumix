@@ -1,0 +1,12 @@
+services:
+  lumix:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lumix
+    restart: unless-stopped
+    ports:
+      - "55913:55913"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
