@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="utf-8">
@@ -37,338 +37,191 @@
                 <h1>lumix</h1>
                 <span class="version">v{{VERSION}}</span>
             </div>
-            <p class="tagline">Stremio addon for dramas, series &amp; movies.{{TMDB_TAGLINE}}</p>
+            <p class="tagline" id="tagline">Stremio addon for dramas, series &amp; movies.</p>
         </header>
 
         <!-- Configure -->
         <form id="configureForm">
             <section class="configure">
-                <h3 class="configure-type">Provider</h3>
-                <!-- Tab bar: one tab per provider, each provider owns its panel -->
-                <div class="tabs" id="provider-tabs" role="tablist">
-                    <button type="button" class="tab active" data-tab="kisskh" role="tab">kisskh</button>
-                    <button type="button" class="tab" data-tab="ole" role="tab">欧乐</button>
+                <!-- Language: page text and the catalog names this config produces -->
+                <fieldset class="config-group" id="language-group">
+                    <legend data-i18n="language">Language</legend>
+                    <p class="hint" data-i18n="languageHint">Applies to this page and your Stremio catalogs</p>
+                    <div class="chip-grid">
+                        <span class="chip-option">
+                            <input type="radio" name="language" id="language-en" value="en" checked>
+                            <label class="chip" for="language-en">English</label>
+                        </span>
+                        <span class="chip-option">
+                            <input type="radio" name="language" id="language-zh" value="zh">
+                            <label class="chip" for="language-zh">中文</label>
+                        </span>
+                    </div>
+                </fieldset>
+                <h3 class="configure-type" data-i18n="provider">Provider</h3>
+                <!-- Provider list: the added providers, top to bottom — ✕ removes,
+                     the chips below add back. The sections stack in this order -->
+                <div class="config-group" id="provider-group">
+                    <p class="hint config-hint" id="config-hint" role="alert" hidden></p>
+                    <p class="hint" data-i18n="providerOrderHint">Sections below follow this order — it's the catalog order in Stremio</p>
+                    <ol class="order-list" id="provider-order"></ol>
+                    <p class="hint" id="provider-more-label" hidden data-i18n="addProvider">Add provider · tap to add</p>
+                    <div class="chip-grid" id="provider-more"></div>
                 </div>
 
-                <!-- kisskh panel -->
-                <div class="tab-panel active" id="tab-kisskh" data-provider="kisskh">
-                    <!-- Enabled: an off toggle leaves the provider out of the manifest entirely -->
-                    <fieldset class="config-group provider-enable-group">
-                        <span class="chip-option">
-                            <input type="checkbox" id="kisskh-enabled" class="provider-toggle" checked>
-                            <label class="chip" for="kisskh-enabled">Enabled</label>
-                        </span>
-                        <p class="hint">Turn off to leave kisskh out of the manifest</p>
-                    </fieldset>
+                <!-- kisskh section -->
+                <div class="provider-section" id="panel-kisskh" data-provider="kisskh">
+                    <h4 class="provider-name">kisskh</h4>
                     <!-- Mirrors: an ordered fallback list, first is tried first -->
                     <fieldset class="config-group" id="kisskh-mirrors-group">
-                        <legend>Mirrors</legend>
-                        <p class="hint">At least one required · tried top to bottom ·
+                        <legend data-i18n="mirrors">Mirrors</legend>
+                        <p class="hint" data-i18n="mirrorsHint">At least one required · tried top to bottom ·
                             failed mirrors are retried after 10 min</p>
-                        <ol class="mirror-order" id="kisskh-mirror-order"></ol>
-                        <p class="hint" id="kisskh-mirror-more-label" hidden>More mirrors · tap to add as a fallback</p>
+                        <ol class="order-list" id="kisskh-mirror-order"></ol>
+                        <p class="hint" id="kisskh-mirror-more-label" hidden data-i18n="moreMirrors">More mirrors · tap to add as a fallback</p>
                         <div class="chip-grid" id="kisskh-mirror-more"></div>
                         <div class="mirror-add">
                             <input type="text" id="kisskh-mirror-input" placeholder="kisskh.example.gg"
-                                autocomplete="off" inputmode="url" aria-label="Add a custom mirror URL">
-                            <button type="button" class="paste-btn" data-target="kisskh-mirror-input">Paste</button>
-                            <button type="button" id="kisskh-mirror-add-btn" class="copy-btn">Add</button>
+                                autocomplete="off" inputmode="url" aria-label="Add a custom mirror URL"
+                                data-i18n-aria="mirrorInputAria">
+                            <button type="button" class="paste-btn" data-target="kisskh-mirror-input" data-i18n="paste">Paste</button>
+                            <button type="button" id="kisskh-mirror-add-btn" class="copy-btn" data-i18n="add">Add</button>
                         </div>
                         <p class="hint mirror-error" id="kisskh-mirror-error" role="alert" hidden></p>
                     </fieldset>
 
+                    <!-- Tiers: an ordered pick list per tier — the row order (and the
+                       group order above) is the catalog order Stremio displays -->
                     <fieldset class="config-group" data-tier="type">
-                        <legend>Type</legend>
-                        <p class="hint">At least one required · "All" selects or clears the tier</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-type-all" value="__all__">
-                                <label class="chip" for="kisskh-type-all">All</label>
+                        <legend><span data-i18n="type">Type</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Type group up" data-i18n-aria="moveUpType">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Type group down" data-i18n-aria="moveDownType">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-type-tvseries" value="TVSeries">
-                                <label class="chip" for="kisskh-type-tvseries">TV Series</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-type-movies" value="Movies">
-                                <label class="chip" for="kisskh-type-movies">Movies</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-type-anime" value="Anime">
-                                <label class="chip" for="kisskh-type-anime">Anime</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-type-hollywood" value="Hollywood">
-                                <label class="chip" for="kisskh-type-hollywood">Hollywood</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintType">At least one tier must have picks · rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="kisskh-type-order"></ol>
+                        <p class="hint" id="kisskh-type-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="kisskh-type-more"></div>
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="region">
-                        <legend>Region</legend>
-                        <p class="hint">At least one required · each region adds a series and a movies catalog</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-all" value="__all__">
-                                <label class="chip" for="kisskh-region-all">All</label>
+                        <legend><span data-i18n="region">Region</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Region group up" data-i18n-aria="moveUpRegion">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Region group down" data-i18n-aria="moveDownRegion">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-korean" value="Korean">
-                                <label class="chip" for="kisskh-region-korean">Korean</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-chinese" value="Chinese">
-                                <label class="chip" for="kisskh-region-chinese">Chinese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-japanese" value="Japanese">
-                                <label class="chip" for="kisskh-region-japanese">Japanese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-hongkong" value="Hongkong">
-                                <label class="chip" for="kisskh-region-hongkong">Hongkong</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-thai" value="Thai">
-                                <label class="chip" for="kisskh-region-thai">Thai</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-taiwanese" value="Taiwanese">
-                                <label class="chip" for="kisskh-region-taiwanese">Taiwanese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-philippine" value="Philippine">
-                                <label class="chip" for="kisskh-region-philippine">Philippine</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-indonesian" value="Indonesian">
-                                <label class="chip" for="kisskh-region-indonesian">Indonesian</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-singaporean" value="Singaporean">
-                                <label class="chip" for="kisskh-region-singaporean">Singaporean</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-vietnamese" value="Vietnamese">
-                                <label class="chip" for="kisskh-region-vietnamese">Vietnamese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-turkish" value="Turkish">
-                                <label class="chip" for="kisskh-region-turkish">Turkish</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-indian" value="Indian">
-                                <label class="chip" for="kisskh-region-indian">Indian</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-malaysian" value="Malaysian">
-                                <label class="chip" for="kisskh-region-malaysian">Malaysian</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-region-us" value="US">
-                                <label class="chip" for="kisskh-region-us">United States</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintRegion">At least one tier must have picks · each region adds a series and a movies catalog ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="kisskh-region-order"></ol>
+                        <p class="hint" id="kisskh-region-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="kisskh-region-more"></div>
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="status">
-                        <legend>Status</legend>
-                        <p class="hint">At least one required · applies to series</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-status-all" value="__all__">
-                                <label class="chip" for="kisskh-status-all">All</label>
+                        <legend><span data-i18n="status">Status</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Status group up" data-i18n-aria="moveUpStatus">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Status group down" data-i18n-aria="moveDownStatus">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-status-ongoing" value="Ongoing">
-                                <label class="chip" for="kisskh-status-ongoing">Ongoing</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-status-completed" value="Completed">
-                                <label class="chip" for="kisskh-status-completed">Completed</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintStatus">At least one tier must have picks · applies to series ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="kisskh-status-order"></ol>
+                        <p class="hint" id="kisskh-status-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="kisskh-status-more"></div>
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="update">
-                        <legend>Sort</legend>
-                        <p class="hint">At least one required · sort order of the selected catalogs</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-update-all" value="__all__">
-                                <label class="chip" for="kisskh-update-all">All</label>
+                        <legend><span data-i18n="sort">Sort</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Sort group up" data-i18n-aria="moveUpSort">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Sort group down" data-i18n-aria="moveDownSort">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-update-popular" value="Popular">
-                                <label class="chip" for="kisskh-update-popular">Popular</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-update-last-update" value="Last Update">
-                                <label class="chip" for="kisskh-update-last-update">Last Update</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="kisskh-update-release-date" value="Release Date">
-                                <label class="chip" for="kisskh-update-release-date">Release Date</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintSort">At least one tier must have picks · sort order of the selected catalogs ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="kisskh-update-order"></ol>
+                        <p class="hint" id="kisskh-update-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="kisskh-update-more"></div>
                     </fieldset>
                 </div>
 
-                <!-- ole (欧乐) panel -->
-                <div class="tab-panel" id="tab-ole" data-provider="ole">
-                    <fieldset class="config-group provider-enable-group">
-                        <span class="chip-option">
-                            <input type="checkbox" id="ole-enabled" class="provider-toggle">
-                            <label class="chip" for="ole-enabled">Enabled</label>
-                        </span>
-                        <p class="hint">Turn off to leave 欧乐 out of the manifest</p>
-                    </fieldset>
+                <!-- ole (欧乐) section -->
+                <div class="provider-section" id="panel-ole" data-provider="ole" hidden>
+                    <h4 class="provider-name">欧乐</h4>
                     <fieldset class="config-group" id="ole-mirrors-group">
-                        <legend>API hosts</legend>
-                        <p class="hint">At least one required · tried top to bottom ·
+                        <legend data-i18n="apiHosts">API hosts</legend>
+                        <p class="hint" data-i18n="hostsHint">At least one required · tried top to bottom ·
                             failed hosts are retried after 10 min</p>
-                        <ol class="mirror-order" id="ole-mirror-order"></ol>
-                        <p class="hint" id="ole-mirror-more-label" hidden>More hosts · tap to add as a fallback</p>
+                        <ol class="order-list" id="ole-mirror-order"></ol>
+                        <p class="hint" id="ole-mirror-more-label" hidden data-i18n="moreHosts">More hosts · tap to add as a fallback</p>
                         <div class="chip-grid" id="ole-mirror-more"></div>
                         <div class="mirror-add">
-                                autocomplete="off" inputmode="url" aria-label="Add a custom API host URL">
-                            <button type="button" class="paste-btn" data-target="ole-mirror-input">Paste</button>
-                            <button type="button" id="ole-mirror-add-btn" class="copy-btn">Add</button>
+                                autocomplete="off" inputmode="url" aria-label="Add a custom API host URL"
+                                data-i18n-aria="hostInputAria">
+                            <button type="button" class="paste-btn" data-target="ole-mirror-input" data-i18n="paste">Paste</button>
+                            <button type="button" id="ole-mirror-add-btn" class="copy-btn" data-i18n="add">Add</button>
                         </div>
                         <p class="hint mirror-error" id="ole-mirror-error" role="alert" hidden></p>
                     </fieldset>
 
+                    <!-- Tiers: an ordered pick list per tier — the row order (and the
+                       group order above) is the catalog order Stremio displays -->
                     <fieldset class="config-group" data-tier="type">
-                        <legend>Type</legend>
-                        <p class="hint">At least one required · "All" selects or clears the tier</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-type-all" value="__all__">
-                                <label class="chip" for="ole-type-all">All</label>
+                        <legend><span data-i18n="type">Type</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Type group up" data-i18n-aria="moveUpType">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Type group down" data-i18n-aria="moveDownType">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-type-tvseries" value="TVSeries">
-                                <label class="chip" for="ole-type-tvseries">TV Series</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-type-movies" value="Movies">
-                                <label class="chip" for="ole-type-movies">Movies</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-type-variety" value="Variety">
-                                <label class="chip" for="ole-type-variety">Variety</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-type-anime" value="Anime">
-                                <label class="chip" for="ole-type-anime">Anime</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-type-shortdrama" value="ShortDrama">
-                                <label class="chip" for="ole-type-shortdrama">Short Drama</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintType">At least one tier must have picks · rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="ole-type-order"></ol>
+                        <p class="hint" id="ole-type-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="ole-type-more"></div>
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="region">
-                        <legend>Region</legend>
-                        <p class="hint">At least one required · each region adds a series and a movies catalog</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-all" value="__all__">
-                                <label class="chip" for="ole-region-all">All</label>
+                        <legend><span data-i18n="region">Region</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Region group up" data-i18n-aria="moveUpRegion">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Region group down" data-i18n-aria="moveDownRegion">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-chinese" value="Chinese">
-                                <label class="chip" for="ole-region-chinese">Chinese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-hongkong" value="Hongkong">
-                                <label class="chip" for="ole-region-hongkong">Hongkong</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-taiwanese" value="Taiwanese">
-                                <label class="chip" for="ole-region-taiwanese">Taiwanese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-japanese" value="Japanese">
-                                <label class="chip" for="ole-region-japanese">Japanese</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-korean" value="Korean">
-                                <label class="chip" for="ole-region-korean">Korean</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-us" value="US">
-                                <label class="chip" for="ole-region-us">United States</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-uk" value="UK">
-                                <label class="chip" for="ole-region-uk">United Kingdom</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-thai" value="Thai">
-                                <label class="chip" for="ole-region-thai">Thai</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-french" value="French">
-                                <label class="chip" for="ole-region-french">French</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-german" value="German">
-                                <label class="chip" for="ole-region-german">German</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-italian" value="Italian">
-                                <label class="chip" for="ole-region-italian">Italian</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-spanish" value="Spanish">
-                                <label class="chip" for="ole-region-spanish">Spanish</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-canadian" value="Canadian">
-                                <label class="chip" for="ole-region-canadian">Canadian</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-russian" value="Russian">
-                                <label class="chip" for="ole-region-russian">Russian</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-dutch" value="Dutch">
-                                <label class="chip" for="ole-region-dutch">Dutch</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-region-australian" value="Australian">
-                                <label class="chip" for="ole-region-australian">Australian</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintRegion">At least one tier must have picks · each region adds a series and a movies catalog ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="ole-region-order"></ol>
+                        <p class="hint" id="ole-region-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="ole-region-more"></div>
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="update">
-                        <legend>Sort</legend>
-                        <p class="hint">At least one required · sort order of the selected catalogs</p>
-                        <div class="chip-grid">
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-update-all" value="__all__">
-                                <label class="chip" for="ole-update-all">All</label>
+                        <legend><span data-i18n="sort">Sort</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Sort group up" data-i18n-aria="moveUpSort">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Sort group down" data-i18n-aria="moveDownSort">›</button>
                             </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-update-popular" value="Popular">
-                                <label class="chip" for="ole-update-popular">Popular</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-update-last-update" value="Last Update">
-                                <label class="chip" for="ole-update-last-update">Last Update</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-update-score" value="Score">
-                                <label class="chip" for="ole-update-score">Score</label>
-                            </span>
-                            <span class="chip-option">
-                                <input type="checkbox" id="ole-update-release-date" value="Release Date">
-                                <label class="chip" for="ole-update-release-date">Release Date</label>
-                            </span>
-                        </div>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintSort">At least one tier must have picks · sort order of the selected catalogs ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="ole-update-order"></ol>
+                        <p class="hint" id="ole-update-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="ole-update-more"></div>
                     </fieldset>
                 </div>
             </section>
@@ -378,23 +231,22 @@
         <div id="install">
             <div class="grid-btn">
                 <a id="installApp" target="_blank" rel="noopener noreferrer"
-                    class="btn btn-primary">Install Stremio
+                    class="btn btn-primary"><span data-i18n="installApp">Install Stremio</span>
                     <svg class="icon">
                         <use href="/icons.svg#external"></use>
                     </svg>
                 </a>
                 <a id="installWeb" target="_blank" rel="noopener noreferrer"
-                    class="btn btn-secondary">Install Web
+                    class="btn btn-secondary"><span data-i18n="installWeb">Install Web</span>
                     <svg class="icon">
                         <use href="/icons.svg#external"></use>
                     </svg>
                 </a>
             </div>
-            <p id="config-hint" class="config-hint" style="display: none;"></p>
             <div class="manifest-container">
                 <code class="manifest-url" id="manifestUrl" tabindex="0"></code>
                 <button onclick="copyUrl()" id="copyManifestBtn"
-                    class="copy-btn">Copy</button>
+                    class="copy-btn" data-i18n="copy">Copy</button>
             </div>
         </div>
     </div>
@@ -402,6 +254,7 @@
     <span style="display: none;" id="defaultConfig">{{DEFAULT_CONFIG}}</span>
     <script type="application/json" id="defaultMirrors">{{DEFAULT_MIRRORS}}</script>
     <script type="application/json" id="oleDefaultMirrors">{{OLE_DEFAULT_MIRRORS}}</script>
+    <script type="application/json" id="tmdbCredit">{{TMDB_CREDIT}}</script>
     <script src="/js/landing.js?v={{JS_HASH}}"></script>
 </body>
 

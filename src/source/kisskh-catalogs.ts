@@ -1,6 +1,7 @@
 // Single source of truth for kisskh Explore categories: tier option lists,
-// catalog-id expansion and the upstream API query parameters all derive from
-// these tables. Kept free of imports from kisskh.ts/provider.ts to avoid cycles.
+// tier order, catalog-id expansion and the upstream API query parameters all
+// derive from these tables. Kept free of imports from kisskh.ts/provider.ts
+// to avoid cycles.
 import { KISSKH_CDN_DOMAIN } from "../utils/constant.js";
 import { isKisskhHost } from "../utils/format.js";
 
@@ -106,50 +107,80 @@ export function getKisskhQuery(
   return null;
 }
 
+export type KisskhTier = "type" | "region" | "status" | "update";
+
+// Tier order the config page shows and expandKisskhCatalogs follows when a
+// config carries no order of its own.
+export const KISSKH_TIER_ORDER: readonly KisskhTier[] = [
+  "type",
+  "region",
+  "status",
+  "update",
+];
+
+/** Tier picks as they arrive from a decoded config (order optional). */
 export type KisskhTiers = {
+  order?: readonly string[];
   type: string[];
   region: string[];
   status: string[];
   update: string[];
 };
 
+/** normalizeKisskhTiers output: validated picks plus a full tier order. */
+export type NormalizedKisskhTiers = Omit<KisskhTiers, "order"> & {
+  order: readonly KisskhTier[];
+};
+
+// Row-emission rule per tier (the flat model: every pick is its own row;
+// region/status-pair types each add a series and a movies row).
+const EMIT_TIER: Record<KisskhTier, (pick: string, ids: Set<string>) => void> =
+  {
+    type: (pick, ids) => {
+      switch (pick) {
+        case "TVSeries":
+          ids.add("kisskh.series.TVSeries");
+          break;
+        case "Movies":
+          ids.add("kisskh.movie.Movies");
+          break;
+        case "Anime":
+          ids.add("kisskh.series.Anime");
+          break;
+        case "Hollywood":
+          ids.add("kisskh.series.Hollywood");
+          ids.add("kisskh.movie.Hollywood");
+          break;
+        default:
+          break;
+      }
+    },
+    region: (pick, ids) => {
+      ids.add(`kisskh.series.${pick}`);
+      ids.add(`kisskh.movie.${pick}`);
+    },
+    status: (pick, ids) => {
+      ids.add(`kisskh.series.${pick}`);
+    },
+    update: (pick, ids) => {
+      ids.add(`kisskh.series.${pick}`);
+      ids.add(`kisskh.movie.${pick}`);
+    },
+  };
+
 /**
- * Expand tier picks into manifest catalog ids (flat model: every pick is its
- * own row; region/status-pair types each add a series and a movies row).
- * Picks go through normalizeKisskhTiers first so "__all__" expands.
+ * Expand tier picks into manifest catalog ids, tiers in `settings.order` (the
+ * config page's tier order) and picks in their array order — the resulting
+ * order is the catalog order Stremio displays. Picks go through
+ * normalizeKisskhTiers first so "__all__" expands.
  */
 export function expandKisskhCatalogs(settings: KisskhTiers): string[] {
-  const { type, region, status, update } = normalizeKisskhTiers(settings);
+  const { order, ...picks } = normalizeKisskhTiers(settings);
   const ids = new Set<string>();
-  for (const typePick of type) {
-    switch (typePick) {
-      case "TVSeries":
-        ids.add("kisskh.series.TVSeries");
-        break;
-      case "Movies":
-        ids.add("kisskh.movie.Movies");
-        break;
-      case "Anime":
-        ids.add("kisskh.series.Anime");
-        break;
-      case "Hollywood":
-        ids.add("kisskh.series.Hollywood");
-        ids.add("kisskh.movie.Hollywood");
-        break;
-      default:
-        break;
+  for (const tier of order) {
+    for (const pick of picks[tier]) {
+      EMIT_TIER[tier](pick, ids);
     }
-  }
-  for (const regionPick of region) {
-    ids.add(`kisskh.series.${regionPick}`);
-    ids.add(`kisskh.movie.${regionPick}`);
-  }
-  for (const statusPick of status) {
-    ids.add(`kisskh.series.${statusPick}`);
-  }
-  for (const updatePick of update) {
-    ids.add(`kisskh.series.${updatePick}`);
-    ids.add(`kisskh.movie.${updatePick}`);
   }
   return [...ids];
 }
@@ -162,14 +193,23 @@ export const KISSKH_HIDDEN_CATALOGS = [
 
 /**
  * Normalize tier picks: "__all__" expands to every known option, unknown
- * options are dropped, duplicates removed.
+ * options are dropped, duplicates removed. The order is normalized the same
+ * way: unknown tiers dropped, missing tiers appended in canonical order.
  */
-export function normalizeKisskhTiers(settings: KisskhTiers): KisskhTiers {
+export function normalizeKisskhTiers(settings: KisskhTiers): NormalizedKisskhTiers {
   const expand = (values: string[], known: readonly string[]) =>
     values.includes("__all__")
       ? [...known]
       : [...new Set(values.filter((value) => known.includes(value)))];
+  const knownTiers = KISSKH_TIER_ORDER as readonly string[];
+  const picked = [
+    ...new Set(settings.order ?? []),
+  ].filter((tier): tier is KisskhTier => knownTiers.includes(tier));
   return {
+    order: [
+      ...picked,
+      ...KISSKH_TIER_ORDER.filter((tier) => !picked.includes(tier)),
+    ],
     type: expand(settings.type, KISSKH_TYPE_OPTIONS),
     region: expand(settings.region, KISSKH_REGION_OPTIONS),
     status: expand(settings.status, KISSKH_STATUS_OPTIONS),

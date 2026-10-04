@@ -57,6 +57,23 @@ describe("expandKisskhCatalogs", () => {
     ]);
   });
 
+  it("expands tiers in the configured order", () => {
+    const ids = expandKisskhCatalogs({
+      order: ["update", "region", "type", "status"],
+      type: ["TVSeries"],
+      region: ["Korean"],
+      status: [],
+      update: ["Popular"],
+    });
+    expect(ids).toEqual([
+      "kisskh.series.Popular",
+      "kisskh.movie.Popular",
+      "kisskh.series.Korean",
+      "kisskh.movie.Korean",
+      "kisskh.series.TVSeries",
+    ]);
+  });
+
   it("drops unknown options", () => {
     const ids = expandKisskhCatalogs({
       type: ["Nonsense"],
@@ -134,11 +151,24 @@ describe("normalizeKisskhTiers", () => {
       update: ["Last Update"],
     });
     expect(tiers).toEqual({
+      // No order given: the canonical tier order
+      order: ["type", "region", "status", "update"],
       type: ["TVSeries"],
       region: ["Korean", "US"],
       status: ["Ongoing"],
       update: ["Last Update"],
     });
+  });
+
+  it("normalizes the tier order: unknown dropped, missing appended", () => {
+    const tiers = normalizeKisskhTiers({
+      order: ["update", "bogus", "update", "region"],
+      type: [],
+      region: [],
+      status: [],
+      update: [],
+    });
+    expect(tiers.order).toEqual(["update", "region", "type", "status"]);
   });
 
   it("expands __all__ to every known option", () => {

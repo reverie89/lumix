@@ -13,6 +13,13 @@
   --accent-strong: #aecbfa;
   --on-accent: #062e6f;
   --danger: #f87171;
+  /* Per-provider hues: kisskh keeps the page's Google Blue, 欧乐 the matching
+     Google dark-theme green. Sections and provider rows read these through
+     --provider-accent / --provider-on-accent */
+  --kisskh-accent: var(--accent);
+  --kisskh-on-accent: var(--on-accent);
+  --ole-accent: #81c995;
+  --ole-on-accent: #072711;
   --rounded-md: 10px;
   --rounded-lg: 14px;
   --xxs: 0.2rem;
@@ -40,10 +47,11 @@ body {
   justify-content: center;
 }
 
-/* D-pad / keyboard focus must always be visible (TV webviews have no hover) */
+/* D-pad / keyboard focus must always be visible (TV webviews have no hover);
+   inside a provider section the ring takes that provider's hue */
 :is(button, a, input, select, textarea, [tabindex]):focus-visible,
 .chip-option input:focus-visible + .chip {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--provider-accent, var(--accent));
   outline-offset: 2px;
 }
 
@@ -167,10 +175,12 @@ p:first-child {
   padding: var(--md);
 }
 
-/* Section labels ("Provider" heading and every fieldset legend) share an
-   accent marker bar */
+/* Section labels ("Provider" heading, every fieldset legend and every
+   provider header) share an accent marker bar that takes the enclosing
+   provider's hue inside a section */
 .configure-type,
-.config-group legend {
+.config-group legend,
+.provider-name {
   display: flex;
   align-items: center;
   gap: var(--xs);
@@ -178,12 +188,13 @@ p:first-child {
   font-weight: 700;
 }
 .configure-type::before,
-.config-group legend::before {
+.config-group legend::before,
+.provider-name::before {
   content: "";
   width: 4px;
   height: 1.05em;
   border-radius: 2px;
-  background: var(--accent);
+  background: var(--provider-accent, var(--accent));
   flex-shrink: 0;
 }
 .configure-type:first-child {
@@ -193,11 +204,14 @@ p:first-child {
   margin-top: var(--md);
 }
 
-/* Config groups: one fieldset per setting, hint always visible (no hover) */
+/* Config groups: one group per setting (a fieldset, or a div for
+   button-only groups), hint always visible (no hover).
+   border-radius stays on so the required-alert outline renders rounded */
 .config-group {
   border: 0;
   min-inline-size: auto;
   margin-top: var(--md);
+  border-radius: var(--rounded-md);
 }
 .config-group:first-of-type {
   margin-top: var(--md);
@@ -215,6 +229,23 @@ p:first-child {
   text-align: left;
 }
 
+/* An unmet requirement (no mirror, a provider with no tier picked — flagging
+   every tier group — or no provider added at all, flagging the provider list
+   card) alerts as a rounded red outline plus a red requirement hint, live
+   while it stays empty. An individually empty tier is legitimate and never
+   alerts. Outline instead of border so toggling shifts no layout;
+   :first-of-type keeps the alert off the Mirrors group's later hint
+   paragraphs (more mirrors label, mirror-error). No background fill:
+   Chromium carves the legend zone out of a fieldset's paint in every display
+   mode, so any fill would show a dark band at the top of the box */
+.config-group.required-alert {
+  outline: 2px solid var(--danger);
+}
+.config-group.required-alert > .hint:first-of-type {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /* Chip grids: native checkboxes styled as large D-pad-friendly chips */
 .chip-grid {
   display: flex;
@@ -225,7 +256,8 @@ p:first-child {
 .chip-option {
   display: inline-flex;
 }
-.chip-option input[type="checkbox"] {
+.chip-option input[type="checkbox"],
+.chip-option input[type="radio"] {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -257,15 +289,16 @@ p:first-child {
   color: var(--foreground);
 }
 
-/* Ordered mirrors: numbered fallback list with reorder buttons */
-.mirror-order {
+/* Ordered lists (mirrors, tier picks, provider order): numbered rows with
+   reorder buttons */
+.order-list {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: var(--xs);
   margin-top: var(--xs);
 }
-.mirror-row {
+.order-row {
   display: flex;
   align-items: center;
   gap: var(--xs);
@@ -275,19 +308,19 @@ p:first-child {
   padding: var(--xxs) var(--xs);
   min-height: 48px;
 }
-.mirror-index {
+.order-index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 1.8rem;
   height: 1.8rem;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--provider-accent, var(--accent));
+  color: var(--provider-on-accent, var(--on-accent));
   font-weight: 700;
   flex-shrink: 0;
 }
-.mirror-name {
+.order-name {
   flex: 1;
   text-align: left;
   font-size: 1.1rem;
@@ -295,7 +328,7 @@ p:first-child {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mirror-btn {
+.order-btn {
   width: 44px;
   height: 44px;
   display: inline-flex;
@@ -310,12 +343,19 @@ p:first-child {
   cursor: pointer;
   flex-shrink: 0;
 }
-.mirror-btn:not(:disabled):hover {
+.order-btn:not(:disabled):hover {
   border-color: var(--accent);
 }
-.mirror-btn:disabled {
+.order-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* Tier legends carry the group's reorder buttons, pinned to the right edge */
+.legend-controls {
+  margin-left: auto;
+  display: inline-flex;
+  gap: var(--xxs);
 }
 
 /* Custom mirror input: input and Add button stretch to the same height */
@@ -349,40 +389,65 @@ p:first-child {
   font-weight: 600;
 }
 
-/* Provider tabs */
-.tabs {
-  display: flex;
-  gap: var(--xs);
+/* Provider sections: one tinted card per added provider, stacked in the
+   provider-order list's sequence. Each card resolves --provider-accent from
+   the provider tokens, so every accent inside (legend markers, row badges,
+   picked chips, buttons, focus ring) takes the provider's hue without
+   duplicated rules */
+.provider-section {
+  --provider-accent: var(--kisskh-accent);
+  --provider-on-accent: var(--kisskh-on-accent);
+  background: color-mix(in srgb, var(--provider-accent), transparent 92%);
+  border: 1px solid
+    color-mix(in srgb, var(--provider-accent), transparent 65%);
+  border-radius: var(--rounded-lg);
+  padding: var(--md);
   margin-top: var(--md);
 }
-.tab {
-  flex: 1;
-  background: transparent;
-  border: 2px solid var(--border);
-  border-radius: var(--rounded-md);
-  padding: var(--xs) var(--md);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 1.1em;
-  font-weight: 600;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
-  min-height: 48px;
+.provider-section[data-provider="ole"] {
+  --provider-accent: var(--ole-accent);
+  --provider-on-accent: var(--ole-on-accent);
 }
-.tab:hover {
-  border-color: var(--accent);
+.provider-name {
+  margin-top: 0;
+  font-size: 1.15rem;
+  color: var(--provider-accent);
 }
-.tab.active {
-  color: var(--on-accent);
-  border-color: var(--accent);
-  background: var(--accent);
+.provider-section .order-index {
+  background: var(--provider-accent);
+  color: var(--provider-on-accent);
 }
-.tab-panel {
-  display: none;
+.provider-section .chip:hover,
+.provider-section .order-btn:not(:disabled):hover {
+  border-color: var(--provider-accent);
 }
-.tab-panel.active {
-  display: block;
+.provider-section .chip-option input:checked + .chip {
+  border-color: var(--provider-accent);
+  background: color-mix(in srgb, var(--provider-accent), transparent 78%);
+}
+.provider-section .copy-btn,
+.provider-section .paste-btn {
+  background: color-mix(in srgb, var(--provider-accent), transparent 75%);
+  border-color: var(--provider-accent);
+}
+.provider-section .copy-btn:hover,
+.provider-section .paste-btn:hover {
+  background: color-mix(in srgb, var(--provider-accent), transparent 55%);
+}
+
+/* The provider list and its add-chips carry each provider's hue, so the list
+   reads as the legend for the sections below */
+#provider-order .order-row[data-value="ole"] .order-index {
+  background: var(--ole-accent);
+  color: var(--ole-on-accent);
+}
+#provider-more .chip[data-value="kisskh"] {
+  border-color: var(--kisskh-accent);
+  color: var(--kisskh-accent);
+}
+#provider-more .chip[data-value="ole"] {
+  border-color: var(--ole-accent);
+  color: var(--ole-accent);
 }
 .config-hint {
   color: var(--danger);
@@ -441,4 +506,11 @@ p:first-child {
 .copy-btn:hover,
 .paste-btn:hover {
   background: color-mix(in srgb, var(--accent), transparent 55%);
+}
+/* Check-flash state: the button is icon-only, so drop the after-text offset */
+.copy-btn .icon {
+  display: block;
+  margin: 0 auto;
+  width: 1.2rem;
+  height: 1.2rem;
 }

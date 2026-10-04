@@ -46,10 +46,16 @@ const getLandingPage = () => {
       "{{OLE_DEFAULT_MIRRORS}}",
       JSON.stringify(OLE_DEFAULT_MIRRORS),
     )
-    // The tagline only credits TMDB on deployments that actually enrich with it
+    // The tagline only credits TMDB on deployments that actually enrich with
+    // it; both languages' credit text ships as one payload the page appends
+    // to its (localized) tagline
     .replace(
-      "{{TMDB_TAGLINE}}",
-      ENV.TMDB_API_KEY ? " Metadata provided by TMDB." : "",
+      "{{TMDB_CREDIT}}",
+      JSON.stringify(
+        ENV.TMDB_API_KEY
+          ? { en: " Metadata provided by TMDB.", zh: " 元数据由 TMDB 提供。" }
+          : { en: "", zh: "" },
+      ),
     )
     .replace("{{CSS_HASH}}", assetHash("css/style.css"))
     .replace("{{JS_HASH}}", assetHash("js/landing.js"));

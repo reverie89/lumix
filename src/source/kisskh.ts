@@ -40,7 +40,7 @@ import { getKisskhQuery } from "./kisskh-catalogs.js";
 import { getSubtitleVtt } from "./kisskh-subtitle.js";
 import { ContentDetail } from "./meta.js";
 import { BaseProvider } from "./provider.js";
-import { tmdb, isTmdbEnabled } from "./tmdb.js";
+import { tmdb, isTmdbEnabled, tmdbLanguage } from "./tmdb.js";
 
 interface SearchResult {
   id: number;
@@ -291,8 +291,15 @@ export class KisskhScraper extends BaseProvider {
     const validRelease = !Number.isNaN(releaseDate.getTime());
     let year = validRelease ? releaseDate.getFullYear() : fallbackDate.getFullYear();
     let date = (validRelease ? releaseDate : fallbackDate).toISOString();
+    // TMDB text localizes to the config language (matching stays English,
+    // see searchDetail)
     const tmdbDetail = isTmdbEnabled()
-      ? await tmdb.searchDetail(detail.title, type)
+      ? await tmdb.searchDetail(
+          detail.title,
+          type,
+          undefined,
+          tmdbLanguage(config),
+        )
       : null;
     const background = tmdbDetail?.background || detail.thumbnail;
     const metaId = `${Prefix.KISSKH}:${detail.id}`;

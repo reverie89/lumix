@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildManifest } from "./manifest.js";
+import type { KisskhSettings, OleSettings } from "./manifest.js";
+import { buildManifest, defaultConfig, UserConfig } from "./manifest.js";
+import { Provider } from "../source/provider.js";
+import { KISSKH_HIDDEN_CATALOGS, normalizeKisskhTiers } from "../source/kisskh-catalogs.js";
+import { OLE_HIDDEN_CATALOGS, normalizeOleTiers } from "../source/ole-catalogs.js";
+import {
+  MANIFEST_DESCRIPTION_ZH,
+  PROVIDER_LABELS,
+  TIER_LABELS_ZH,
+} from "../utils/constant.js";
 
 describe("buildManifest logo", () => {
   it("stamps the logo with the requesting origin without poisoning the memo", () => {
@@ -8,5 +17,154 @@ describe("buildManifest logo", () => {
     // The default-manifest memo must not pin the first origin it served
     const second = buildManifest(undefined, "https://b.example.com");
     expect(second.logo).toBe("https://b.example.com/img/lumix.ico");
+  });
+});
+
+describe("defaultConfig", () => {
+  it("pins the default kisskh tiers and order", () => {
+    const kisskh = defaultConfig.providers.kisskh as KisskhSettings;
+    expect(kisskh.order).toEqual(["update", "type", "region", "status"]);
+    expect(kisskh.update).toEqual(["Last Update"]);
+    expect(kisskh.type).toEqual(["TVSeries", "Movies", "Hollywood"]);
+    expect(kisskh.region).toEqual([
+      "Korean",
+      "Chinese",
+      "Japanese",
+      "Hongkong",
+      "US",
+    ]);
+    // status defaults to none — no Ongoing/Completed rows anywhere
+    expect(kisskh.status).toEqual([]);
+  });
+
+  it("pins the default ole tiers and order", () => {
+    const ole = defaultConfig.providers.ole as OleSettings;
+    expect(ole.order).toEqual(["type", "region", "update"]);
+    expect(ole.type).toEqual(["TVSeries", "Movies", "Variety", "ShortDrama"]);
+    expect(ole.region).toEqual([
+      "Chinese",
+      "Hongkong",
+      "Taiwanese",
+      "Japanese",
+      "Korean",
+      "US",
+    ]);
+    // update defaults to none — no Popular/Score rows anywhere
+    expect(ole.update).toEqual([]);
+  });
+
+  it("expands the default tiers with no status rows, update rows first, kisskh before ole", () => {
+    expect(defaultConfig.catalogs).toEqual([
+      "kisskh.series.Last Update",
+      "kisskh.movie.Last Update",
+      "kisskh.series.TVSeries",
+      "kisskh.movie.Movies",
+      "kisskh.series.Hollywood",
+      "kisskh.movie.Hollywood",
+      "kisskh.series.Korean",
+      "kisskh.movie.Korean",
+      "kisskh.series.Chinese",
+      "kisskh.movie.Chinese",
+      "kisskh.series.Japanese",
+      "kisskh.movie.Japanese",
+      "kisskh.series.Hongkong",
+      "kisskh.movie.Hongkong",
+      "kisskh.series.US",
+      "kisskh.movie.US",
+      ...KISSKH_HIDDEN_CATALOGS,
+      "ole.series.TVSeries",
+      "ole.movie.Movies",
+      "ole.series.Variety",
+      "ole.series.ShortDrama",
+      "ole.series.Chinese",
+      "ole.movie.Chinese",
+      "ole.series.Hongkong",
+      "ole.movie.Hongkong",
+      "ole.series.Taiwanese",
+      "ole.movie.Taiwanese",
+      "ole.series.Japanese",
+      "ole.movie.Japanese",
+      "ole.series.Korean",
+      "ole.movie.Korean",
+      "ole.series.US",
+      "ole.movie.US",
+      ...OLE_HIDDEN_CATALOGS,
+    ]);
+  });
+
+  it("serves the default catalogs in the unconfigured manifest", () => {
+    const manifest = buildManifest(undefined);
+    expect(manifest.catalogs.map((catalog) => catalog.id)).toEqual(
+      defaultConfig.catalogs,
+    );
+  });
+});
+
+describe("buildManifest language", () => {
+  const languageConfig = (language: "en" | "zh"): UserConfig => ({
+    ...defaultConfig,
+    language,
+    catalogs: [
+      "kisskh.series.Korean",
+      "kisskh.movie.Search",
+      "ole.movie.Chinese",
+    ],
+    catalog: [Provider.KISSKH, Provider.OLE],
+    stream: [],
+  });
+
+  it("localizes catalog names and the description for a zh config", () => {
+    const manifest = buildManifest(languageConfig("zh"));
+    expect(manifest.description).toBe(MANIFEST_DESCRIPTION_ZH);
+    expect(manifest.catalogs.map((catalog) => catalog.name)).toEqual([
+      "[L/kisskh] 韩国",
+      "[L/kisskh] 搜索",
+      "[L/欧乐] 大陆",
+    ]);
+  });
+
+  it("keeps the English catalog names and description otherwise", () => {
+    const manifest = buildManifest(languageConfig("en"));
+    expect(manifest.catalogs.map((catalog) => catalog.name)).toEqual([
+      "[L/kisskh] Korean",
+      "[L/kisskh] Search",
+      "[L/欧乐] Chinese",
+    ]);
+    // Same description the unconfigured manifest serves
+    expect(manifest.description).toBe(buildManifest(undefined).description);
+  });
+
+  it("labels every tier option of both providers in zh (no catalog name falls back to the raw token)", () => {
+    const kisskh = normalizeKisskhTiers({
+      type: ["__all__"],
+      region: ["__all__"],
+      status: ["__all__"],
+      update: ["__all__"],
+    });
+    const ole = normalizeOleTiers({
+      type: ["__all__"],
+      region: ["__all__"],
+      update: ["__all__"],
+    });
+    // Explicit tier keys: the normalized shapes also carry `order`, whose
+    // entries (tier names) are not catalog options
+    const options = new Set([
+      ...kisskh.type,
+      ...kisskh.region,
+      ...kisskh.status,
+      ...kisskh.update,
+      ...ole.type,
+      ...ole.region,
+      ...ole.update,
+      // hidden search catalogs get manifest names too
+      "Search",
+    ]);
+    expect(options.size).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(TIER_LABELS_ZH[option], `missing zh label for ${option}`).toBeTruthy();
+    }
+    for (const provider of [Provider.KISSKH, Provider.OLE]) {
+      expect(PROVIDER_LABELS[provider], `missing label for ${provider}`).toBeTruthy();
+    }
   });
 });

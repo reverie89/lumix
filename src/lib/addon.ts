@@ -308,7 +308,8 @@ export async function buildMetaHandler(
 ): Promise<{ meta: MetaDetail } & Cache> {
   logger.log(`Meta | ${args.id}`);
   const { id, type } = args;
-  const metaKey = `meta:${type}:${id}`;
+  // The meta detail carries TMDB text localized to the config language
+  const metaKey = `meta:${type}:${id}:${config.language}`;
   const cacheMeta = cache.get(metaKey);
   if (cacheMeta) return cacheMeta;
 

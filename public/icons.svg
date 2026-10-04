@@ -10,6 +10,13 @@
         <path
             d="M15 3h6v6" />
     </symbol>
+    <symbol
+        id="check"
+        viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        class="lucide lucide-check-icon lucide-check">
+        <path d="M20 6 9 17l-5-5" />
+    </symbol>
     <symbol id="github" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision"
         text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd"
         clip-rule="evenodd" viewBox="0 0 512 499.368">

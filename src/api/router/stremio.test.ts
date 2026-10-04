@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { Provider } from "../../source/provider.js";
+import { defaultConfig } from "../../lib/manifest.js";
+import {
+  KISSKH_DEFAULT_MIRRORS,
+  OLE_DEFAULT_MIRRORS,
+} from "../../utils/constant.js";
 import { decodeConfig, getResourceLimitResponse } from "./stremio.js";
 
 const encode = (value: unknown) =>
@@ -28,6 +33,8 @@ describe("decodeConfig", () => {
         "https://kisskh.example.evil.com",
         "https://other.com",
       ],
+      // No order given: the canonical tier order
+      order: ["type", "region", "status", "update"],
       type: ["TVSeries"],
       region: ["Korean"],
       status: ["Completed"],
@@ -38,6 +45,22 @@ describe("decodeConfig", () => {
     expect(config.catalogs).toContain("kisskh.series.TVSeries");
     expect(config.catalogs).toContain("kisskh.series.Korean");
     expect(config.catalogs).toContain("kisskh.series.Search");
+  });
+
+  it("keeps a picked zh language and reads absent, invalid or legacy values as en", () => {
+    expect(decodeConfig(encode({ language: "zh", ...tierConfig })).language).toBe(
+      "zh",
+    );
+    expect(decodeConfig(encode(tierConfig)).language).toBe("en");
+    expect(
+      decodeConfig(encode({ language: "fr", ...tierConfig })).language,
+    ).toBe("en");
+    const legacy = {
+      catalogs: ["kisskh.series.Korean"],
+      catalog: ["kisskh"],
+      stream: ["kisskh"],
+    };
+    expect(decodeConfig(encode(legacy)).language).toBe("en");
   });
 
   it("normalizes ole tiers and keeps both providers when both are picked", () => {
@@ -55,6 +78,8 @@ describe("decodeConfig", () => {
     );
     expect(config.providers.ole).toEqual({
       mirrors: [],
+      // No order given: the canonical tier order
+      order: ["type", "region", "update"],
       type: ["Movies", "TVSeries"],
       region: ["Korean"],
       update: ["Popular"],
@@ -67,6 +92,56 @@ describe("decodeConfig", () => {
     expect(config.catalogs).toContain("ole.series.Search");
     // kisskh catalogs survive the merge
     expect(config.catalogs).toContain("kisskh.series.TVSeries");
+  });
+
+  it("orders providers and tiers by the config's order fields", () => {
+    const config = decodeConfig(
+      encode({
+        order: ["ole", "bogus", "kisskh"],
+        providers: {
+          kisskh: {
+            mirrors: [],
+            order: ["region", "type", "status", "update"],
+            type: ["TVSeries"],
+            region: ["Korean"],
+            status: [],
+            update: [],
+          },
+          ole: {
+            mirrors: [],
+            type: ["Movies"],
+            region: [],
+            update: [],
+          },
+        },
+      }),
+    );
+    expect(config.catalog).toEqual([Provider.OLE, Provider.KISSKH]);
+    // 欧乐 rows first, kisskh region rows before its type rows, hidden
+    // search rows last within each provider
+    expect(config.catalogs).toEqual([
+      "ole.movie.Movies",
+      "ole.series.Search",
+      "ole.movie.Search",
+      "kisskh.series.Korean",
+      "kisskh.movie.Korean",
+      "kisskh.series.TVSeries",
+      "kisskh.series.Search",
+      "kisskh.movie.Search",
+    ]);
+  });
+
+  it("appends providers missing from the order after the named ones", () => {
+    const config = decodeConfig(
+      encode({
+        order: ["OLE"], // case-insensitive; kisskh missing: appended after
+        providers: {
+          kisskh: { mirrors: [], type: ["TVSeries"], region: [], status: [], update: [] },
+          ole: { mirrors: [], type: ["TVSeries"], region: [], update: [] },
+        },
+      }),
+    );
+    expect(config.catalog).toEqual([Provider.OLE, Provider.KISSKH]);
   });
 
   it("expands ole __all__ tiers", () => {
@@ -107,17 +182,61 @@ describe("decodeConfig", () => {
 
   it("falls back to the default config on malformed input", () => {
     const fallback = decodeConfig("not-json-at-all");
-    expect(fallback.catalog).toEqual([Provider.KISSKH]);
+    expect(fallback.catalog).toEqual([Provider.KISSKH, Provider.OLE]);
     expect(fallback.catalogs.length).toBeGreaterThan(0);
     // Valid JSON of the wrong shape falls back to the default catalogs
     const wrongShape = decodeConfig(encode("just a string"));
     expect(wrongShape.providers.kisskh).toBeDefined();
-    expect(wrongShape.catalog).toEqual([Provider.KISSKH]);
+    expect(wrongShape.providers.ole).toBeDefined();
+    expect(wrongShape.catalog).toEqual([Provider.KISSKH, Provider.OLE]);
     // Deeply nested JSON that crashes JSON.parse is caught like any other
     let deep: Record<string, unknown> = { value: 1 };
     for (let i = 0; i < 100000; i++) deep = { nested: deep };
     const crashed = decodeConfig(encode(deep));
     expect(crashed.catalogs.length).toBeGreaterThan(0);
+  });
+
+  it("decodes the saved default-config link into the built-in defaultConfig", () => {
+    // The link the deployment owner saved as lumix's default: a fresh config
+    // page and the unconfigured manifest must serve exactly this selection,
+    // so decodeConfig has to reproduce defaultConfig from it. The mirror
+    // lists come from the same constants the page pre-fills from (public.ts
+    // injects them into the page), so the link and the constants cannot drift.
+    const savedLink = {
+      language: "en",
+      order: ["kisskh", "ole"],
+      providers: {
+        kisskh: {
+          mirrors: KISSKH_DEFAULT_MIRRORS,
+          order: ["update", "type", "region", "status"],
+          type: ["TVSeries", "Movies", "Hollywood"],
+          region: ["Korean", "Chinese", "Japanese", "Hongkong", "US"],
+          status: [],
+          update: ["Last Update"],
+        },
+        ole: {
+          mirrors: OLE_DEFAULT_MIRRORS,
+          order: ["type", "region", "update"],
+          type: ["TVSeries", "Movies", "Variety", "ShortDrama"],
+          region: ["Chinese", "Hongkong", "Taiwanese", "Japanese", "Korean", "US"],
+          update: [],
+        },
+      },
+    };
+    const config = decodeConfig(
+      Buffer.from(JSON.stringify(savedLink), "utf-8").toString("base64url"),
+    );
+    expect(config.catalogs).toEqual(defaultConfig.catalogs);
+    expect(config.catalog).toEqual(defaultConfig.catalog);
+    expect(config.stream).toEqual(defaultConfig.stream);
+    expect(config.providers.kisskh).toEqual({
+      ...defaultConfig.providers.kisskh,
+      mirrors: KISSKH_DEFAULT_MIRRORS,
+    });
+    expect(config.providers.ole).toEqual({
+      ...defaultConfig.providers.ole,
+      mirrors: OLE_DEFAULT_MIRRORS,
+    });
   });
 
   it("keeps only known kisskh catalogs from legacy flat configs", () => {

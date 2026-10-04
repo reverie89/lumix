@@ -91,16 +91,40 @@ const TMDB_HOST = "api.tmdb.org";
  */
 export const isTmdbEnabled = () => !!ENV.TMDB_API_KEY;
 
+// Display language for localized detail fetches. Exact BCP-47 casing —
+// TMDB silently serves English for a lowercase "zh-cn".
+export type TmdbLanguage = "zh-CN" | undefined;
+
+/**
+ * Config language → TMDB request language. Undefined means English: the
+ * request then omits the `language` param entirely, so English URLs (and
+ * their axiosGet cache entries) stay byte-identical to before localization.
+ */
+export function tmdbLanguage(config?: { language?: string }): TmdbLanguage {
+  return config?.language === "zh" ? "zh-CN" : undefined;
+}
+
+// Localized detail requests must still see English art: TMDB filters the
+// appended images to the request language unless include_image_language
+// says otherwise (raw commas — URLSearchParams would percent-encode them).
+const imageLanguageParams = (language?: TmdbLanguage) =>
+  language ? "&include_image_language=zh,en,null" : "";
+
 class TMDBService {
   private logger = new Logger("tmdb");
   private baseUrl: string = `https://${TMDB_HOST}/3`;
   private imageUrl: string = "https://image.tmdb.org";
 
   // Search
+  // The /search calls stay parameterless (English): result titles feed
+  // matchTitle, and resolved titles later drive the providers' own search
+  // (streams resolve by title) — a localized title would break both. Only
+  // the final id-based detail fetch localizes.
   async searchDetail(
     search: string,
     type: ContentType,
     year?: number,
+    language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
     const extracted = extractTitle(search);
     const season = extracted.season || 1;
@@ -111,15 +135,16 @@ class TMDBService {
       year = undefined;
     }
     if (type === "series") {
-      return await this.searchSeriesDetail(search, year);
+      return await this.searchSeriesDetail(search, year, language);
     } else {
-      return await this.searchMovieDetail(search, year);
+      return await this.searchMovieDetail(search, year, language);
     }
   }
 
   async searchSeriesDetail(
     title: string,
     year?: number,
+    language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
     try {
       const response = await this.getSearchSeries(title, year);
@@ -143,7 +168,7 @@ class TMDBService {
       const tv = detail[0];
       if (tv) {
         this.logger.log(`Found | ${tv.title} ${tv.year} ${tv.imdbId || ""}`);
-        const detail = await this.getSeriesDetail(tv.id);
+        const detail = await this.getSeriesDetail(tv.id, language);
         return detail;
       }
       return null;
@@ -164,6 +189,7 @@ class TMDBService {
   async searchMovieDetail(
     title: string,
     year?: number,
+    language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
     try {
       const movieResponse = await this.getSearchMovie(title, year);
@@ -173,7 +199,7 @@ class TMDBService {
         this.logger.log(
           `Found | ${movie.title} ${movie.year} ${movie.imdbId || ""}`,
         );
-        const detail = await this.getMovieDetail(movie.id);
+        const detail = await this.getMovieDetail(movie.id, language);
         return detail;
       }
       return null;
@@ -292,10 +318,13 @@ class TMDBService {
     return content;
   }
 
-  async getMovieDetail(tmdbId: string): Promise<ContentDetail | null> {
+  async getMovieDetail(
+    tmdbId: string,
+    language?: TmdbLanguage,
+  ): Promise<ContentDetail | null> {
     this.logger.debug(`ID ${tmdbId}`);
     try {
-      const movie = await this.getMovieDetailImageExternalId(tmdbId);
+      const movie = await this.getMovieDetailImageExternalId(tmdbId, language);
       if (!movie) return null;
       const images = movie.images;
       const externalId = movie.external_ids;
@@ -312,7 +341,10 @@ class TMDBService {
       };
       if (movie.imdb_id) content.imdbId = movie.imdb_id;
       if (externalId?.imdb_id) content.imdbId = externalId.imdb_id;
-      const { logo, background } = this.extractLogoAndBackground(images);
+      const { logo, background } = this.extractLogoAndBackground(
+        images,
+        language,
+      );
       if (logo) content.logo = logo;
       if (background) content.background = background;
       return content;
@@ -322,10 +354,13 @@ class TMDBService {
     }
   }
 
-  async getSeriesDetail(tmdbId: string): Promise<ContentDetail | null> {
+  async getSeriesDetail(
+    tmdbId: string,
+    language?: TmdbLanguage,
+  ): Promise<ContentDetail | null> {
     this.logger.debug(`ID ${tmdbId}`);
     try {
-      const series = await this.getTvDetailImageExternalId(tmdbId);
+      const series = await this.getTvDetailImageExternalId(tmdbId, language);
       if (!series) return null;
       const images = series.images;
       const externalId = series.external_ids;
@@ -341,7 +376,10 @@ class TMDBService {
         thumbnail: thumbnail,
       };
       if (externalId?.imdb_id) content.imdbId = externalId.imdb_id;
-      const { logo, background } = this.extractLogoAndBackground(images);
+      const { logo, background } = this.extractLogoAndBackground(
+        images,
+        language,
+      );
       if (logo) content.logo = logo;
       if (background) content.background = background;
       return content;
@@ -354,29 +392,43 @@ class TMDBService {
   // Combined request
   async getTvDetailImageExternalId(
     id: string,
+    language?: TmdbLanguage,
   ): Promise<TmdbTvImagesExternalId> {
     return await this._getRequest<TmdbTvImagesExternalId>(
-      `/tv/${id}?append_to_response=images,external_ids`,
+      `/tv/${id}?append_to_response=images,external_ids${imageLanguageParams(language)}`,
+      {},
+      language,
     );
   }
 
   async getMovieDetailImageExternalId(
     id: string,
+    language?: TmdbLanguage,
   ): Promise<TmdbMovieImagesExternalId> {
     return await this._getRequest<TmdbMovieImagesExternalId>(
-      `/movie/${id}?append_to_response=images,external_ids`,
+      `/movie/${id}?append_to_response=images,external_ids${imageLanguageParams(language)}`,
+      {},
+      language,
     );
   }
 
-  extractLogoAndBackground(images?: TmdbTvImages) {
+  extractLogoAndBackground(
+    images?: TmdbTvImages,
+    language?: TmdbLanguage,
+  ) {
     if (!images) return { logo: "", background: "" };
+    // Image iso_639_1 values are bare 639-1 codes ("zh"), not BCP-47
+    const preferred = language === "zh-CN" ? "zh" : "en";
+    const byLang = (imgs: TmdbTvImage[], lang: string) =>
+      imgs.find((img: any) => img.iso_639_1 === lang)?.file_path;
     const logoPath =
-      images.logos.find((logo: any) => logo.iso_639_1 === "en")?.file_path ||
+      byLang(images.logos, preferred) ||
+      byLang(images.logos, "en") ||
       images.logos[0]?.file_path ||
       "";
     const backdropPath =
-      images.backdrops.find((logo: any) => logo.iso_639_1 === "en")
-        ?.file_path ||
+      byLang(images.backdrops, preferred) ||
+      byLang(images.backdrops, "en") ||
       images.backdrops[0]?.file_path ||
       "";
 
@@ -391,6 +443,7 @@ class TMDBService {
   private async _getRequest<T>(
     endpoint: string,
     params: Record<string, any> = {},
+    language?: TmdbLanguage,
   ): Promise<T> {
     if (!ENV.TMDB_API_KEY) {
       // No key configured: fail fast so call sites fall back to kisskh data
@@ -399,10 +452,12 @@ class TMDBService {
     }
     const queryParams = new URLSearchParams({
       ...params,
+      ...(language ? { language } : {}),
     });
     let url = `${this.baseUrl}${endpoint}`;
     if (queryParams.size > 0) {
-      url += `?${queryParams}`;
+      // Detail endpoints already carry ?append_to_response in their path
+      url += `${endpoint.includes("?") ? "&" : "?"}${queryParams}`;
     }
     url = getProxyUrl(url);
     const config: AxiosRequestConfig = {

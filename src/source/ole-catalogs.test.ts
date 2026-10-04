@@ -39,6 +39,22 @@ describe("expandOleCatalogs", () => {
     ]);
   });
 
+  it("expands tiers in the configured order", () => {
+    const ids = expandOleCatalogs({
+      order: ["update", "type", "region"],
+      type: ["TVSeries"],
+      region: ["Korean"],
+      update: ["Popular"],
+    });
+    expect(ids).toEqual([
+      "ole.series.Popular",
+      "ole.movie.Popular",
+      "ole.series.TVSeries",
+      "ole.series.Korean",
+      "ole.movie.Korean",
+    ]);
+  });
+
   it("drops unknown options", () => {
     const ids = expandOleCatalogs({
       type: ["午夜影院"],
@@ -110,10 +126,22 @@ describe("normalizeOleTiers", () => {
       update: ["Popular"],
     });
     expect(tiers).toEqual({
+      // No order given: the canonical tier order
+      order: ["type", "region", "update"],
       type: ["Movies"],
       region: ["Chinese", "US"],
       update: ["Popular"],
     });
+  });
+
+  it("normalizes the tier order: unknown dropped, missing appended", () => {
+    const tiers = normalizeOleTiers({
+      order: ["region", "bogus", "region"],
+      type: [],
+      region: [],
+      update: [],
+    });
+    expect(tiers.order).toEqual(["region", "type", "update"]);
   });
 
   it("expands __all__ to every known option", () => {

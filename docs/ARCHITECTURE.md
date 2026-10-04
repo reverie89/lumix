@@ -14,40 +14,55 @@ live in the root [AGENTS.md](../AGENTS.md).
 | Migrations | **drizzle-kit**                | `drizzle/lumix/`, applied on startup                                       |
 | Scraper  | **axios + cheerio**             | One shared client factory in `src/utils/axios.ts` with retry on 429/451/403   |
 | Matching | **fuse.js / fuzzball**          | Fuzzy title matching, threshold from `MIN_MATCHING_SCORE`                     |
-| Config UI | **Vanilla JS chip grids**      | No framework, no dropdowns; native checkboxes/buttons for D-pad use          |
+| Config UI | **Vanilla JS ordered lists + chip grids** | No framework, no dropdowns; native checkboxes/buttons for D-pad use          |
 | Tests    | **vitest**                      | Pure-domain tests only; no network in unit tests                              |
 
 ## The config path
 
 1. `public/js/landing.js` collects the form into
-   `{ providers: { kisskh: { mirrors, type, region, status, update }, ole: { mirrors, type, region, update } } }`,
-   base64url-encodes it and shows `/{configBase64}/manifest.json`. Only
-   Enabled providers are included; a provider toggled on starts from its
-   full default selection.
+   `{ language, order, providers: { kisskh: { mirrors, order, type, region, status, update }, ole: { mirrors, order, type, region, update } } }`,
+   base64url-encodes it and shows `/{configBase64}/manifest.json`. The
+   top-level `order` is the provider order, each provider's `order` its tier
+   order, and every pick array carries the user's pick order — together they
+   are the catalog order Stremio displays. `language` is `"en"` or `"zh"`
+   (English default). Only Enabled providers are included; a provider
+   toggled on starts from its full default selection.
 2. `decodeConfig` (`src/api/router/stremio.ts`) decodes and **normalizes**:
-   a mirror is any http(s) URL (the page auto-prefixes `https://`), tier
-   picks are filtered to known options (`__all__` expands), and catalog ids
-   are expanded server-side. Every provider block present contributes — a
-   config may enable kisskh and 欧乐 together. Never trust a decoded
-   config's shape — `stremio.test.ts` pins each rule.
+   mirrors, tier picks (`__all__` expands), both `order` fields (unknowns
+   dropped, missing appended in canonical order), `language` (`"zh"` only
+   when exactly that; absent/invalid/legacy → `"en"`) and the server-side
+   catalog-id expansion in that order. Every provider block present
+   contributes — a config may enable kisskh and 欧乐 together. Never trust a
+   decoded config's shape — `stremio.test.ts` pins each rule.
 3. `buildManifest(config)` turns the expanded `catalogs` into Stremio catalog
-   declarations; the handlers in `src/lib/addon.ts` gate every request
-   through `filterProvider` (config's `catalog`/`stream` lists).
+   declarations (names/description localized through `TIER_LABELS_ZH` /
+   `PROVIDER_LABELS` in `utils/constant.ts` when `language` is zh — a test
+   pins label completeness against both catalogs files' options); the
+   handlers in `src/lib/addon.ts` gate every request through
+   `filterProvider` (config's `catalog`/`stream` lists).
 
 ## Provider catalogs are the single sources of truth
 
 `src/source/kisskh-catalogs.ts` and `src/source/ole-catalogs.ts` are the
 single sources of truth for their provider's categories: tier option lists,
+the canonical tier order (`KISSKH_TIER_ORDER`/`OLE_TIER_ORDER` —
+expansion follows the config's tier order and falls back to it),
 `expandKisskhCatalogs`/`expandOleCatalogs` (tier picks → catalog ids,
 used by both the page's server-side expansion and the manifest builder) and
 `getKisskhQuery`/`getOleQuery` (catalog name → upstream API query).
 Option names are shared where the concept is shared (Korean, TVSeries,
 Update…) — each catalogs file maps them to its own upstream API values. A
-category change touches the catalogs file and `landing.html` — nothing
-else. Their unit tests pin the row-expansion rules (each type pick is its
-own row; region/update picks add a series + movies pair; kisskh status rows
-are series-only; kisskh US queries the Hollywood type; ole Movies is the
-only movie-side type).
+category change touches the catalogs file, the `TIER_OPTIONS` table in
+`public/js/landing.js` — nothing else. Their unit tests pin the
+row-expansion rules (each type pick is its own row; region/update picks add
+a series + movies pair; kisskh status rows are series-only; kisskh US
+queries the Hollywood type; ole Movies is the only movie-side type).
+
+Tier picks default to the explicit sets in `src/lib/manifest.ts`
+`defaultKisskhSettings` / `defaultOleSettings` (the unconfigured
+manifest, a fresh page and a re-added provider all start from them);
+`__all__` remains a valid pick that `normalizeKisskhTiers`/
+`normalizeOleTiers` expand server-side to every option of the tier.
 
 ## Hosts and subtitles
 
@@ -71,9 +86,7 @@ defaults live in `utils/constant.ts KISSKH_DEFAULT_MIRRORS` /
 chosen order, skipping mirrors with a failure in the last
 `MIRROR_FAIL_TTL_MS` and otherwise falling back to the best success/fail
 ratio (`MirrorFailover` in `src/service/mirror-failover.ts`, one instance
-per provider). Tier picks default to `__all__`, which
-`normalizeKisskhTiers`/`normalizeOleTiers` expand server-side to every
-option of the tier. The page-side mirror UX is in
+per provider). The page-side mirror UX is in
 [CONFIG_PAGE.md](CONFIG_PAGE.md).
 
 ## Provider contract and vocabulary

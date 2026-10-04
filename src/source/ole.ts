@@ -34,7 +34,7 @@ import { Logger } from "../utils/logger.js";
 import { getOleQuery } from "./ole-catalogs.js";
 import { ContentDetail } from "./meta.js";
 import { BaseProvider } from "./provider.js";
-import { tmdb, isTmdbEnabled } from "./tmdb.js";
+import { tmdb, isTmdbEnabled, tmdbLanguage } from "./tmdb.js";
 
 // pic/picThumb come back site-relative ("upload/vod/...jpg"); the static
 // host serves the same paths cross-origin. The site URL is the Referer the
@@ -244,8 +244,15 @@ export class OleScraper extends BaseProvider {
     const fallbackDate = new Date();
     let year = Number.isFinite(parsedYear) ? parsedYear : fallbackDate.getFullYear();
     let date = fallbackDate.toISOString();
+    // TMDB text localizes to the config language (matching stays English,
+    // see searchDetail)
     const tmdbDetail = isTmdbEnabled()
-      ? await tmdb.searchDetail(detail.name, type)
+      ? await tmdb.searchDetail(
+          detail.name,
+          type,
+          undefined,
+          tmdbLanguage(config),
+        )
       : null;
     const background = tmdbDetail?.background || poster;
     const metaId = `${Prefix.OLE}:${detail.id}`;

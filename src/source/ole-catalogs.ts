@@ -1,6 +1,6 @@
 // Single source of truth for ole (欧乐) Explore categories: tier option
-// lists, catalog-id expansion and the upstream API path parameters all derive
-// from these tables. Kept free of imports from ole.ts/provider.ts to avoid cycles.
+// lists, tier order, catalog-id expansion and the upstream API path parameters
+// all derive from these tables. Kept free of imports from ole.ts/provider.ts to avoid cycles.
 // Option names align with kisskh-catalogs' English vocabulary (same concept,
 // same name: Korean, TVSeries, Update…) so both providers read identically in
 // configs, manifest rows and the Stremio UI; the Chinese strings below are
@@ -105,31 +105,60 @@ export function getOleQuery(
   return null;
 }
 
+export type OleTier = "type" | "region" | "update";
+
+// Tier order the config page shows and expandOleCatalogs follows when a
+// config carries no order of its own.
+export const OLE_TIER_ORDER: readonly OleTier[] = [
+  "type",
+  "region",
+  "update",
+];
+
+/** Tier picks as they arrive from a decoded config (order optional). */
 export type OleTiers = {
+  order?: readonly string[];
   type: string[];
   region: string[];
   update: string[];
 };
 
+/** normalizeOleTiers output: validated picks plus a full tier order. */
+export type NormalizedOleTiers = Omit<OleTiers, "order"> & {
+  order: readonly OleTier[];
+};
+
+// Row-emission rule per tier (the flat model: every pick is its own row;
+// region and update picks each add a series and a movies row).
+const EMIT_TIER: Record<OleTier, (pick: string, ids: Set<string>) => void> =
+  {
+    type: (pick, ids) => {
+      const stremioType = pick === "Movies" ? "movie" : "series";
+      ids.add(`ole.${stremioType}.${pick}`);
+    },
+    region: (pick, ids) => {
+      ids.add(`ole.series.${pick}`);
+      ids.add(`ole.movie.${pick}`);
+    },
+    update: (pick, ids) => {
+      ids.add(`ole.series.${pick}`);
+      ids.add(`ole.movie.${pick}`);
+    },
+  };
+
 /**
- * Expand tier picks into manifest catalog ids (flat model: every pick is its
- * own row; region and update picks each add a series and a movies row).
- * Picks go through normalizeOleTiers first so "__all__" expands.
+ * Expand tier picks into manifest catalog ids, tiers in `settings.order` (the
+ * config page's tier order) and picks in their array order — the resulting
+ * order is the catalog order Stremio displays. Picks go through
+ * normalizeOleTiers first so "__all__" expands.
  */
 export function expandOleCatalogs(settings: OleTiers): string[] {
-  const { type, region, update } = normalizeOleTiers(settings);
+  const { order, ...picks } = normalizeOleTiers(settings);
   const ids = new Set<string>();
-  for (const typePick of type) {
-    const stremioType = typePick === "Movies" ? "movie" : "series";
-    ids.add(`ole.${stremioType}.${typePick}`);
-  }
-  for (const regionPick of region) {
-    ids.add(`ole.series.${regionPick}`);
-    ids.add(`ole.movie.${regionPick}`);
-  }
-  for (const updatePick of update) {
-    ids.add(`ole.series.${updatePick}`);
-    ids.add(`ole.movie.${updatePick}`);
+  for (const tier of order) {
+    for (const pick of picks[tier]) {
+      EMIT_TIER[tier](pick, ids);
+    }
   }
   return [...ids];
 }
@@ -142,14 +171,25 @@ export const OLE_HIDDEN_CATALOGS = [
 
 /**
  * Normalize tier picks: "__all__" expands to every known option, unknown
- * options are dropped, duplicates removed.
+ * options are dropped, duplicates removed. The order is normalized the same
+ * way: unknown tiers dropped, missing tiers appended in canonical order.
  */
-export function normalizeOleTiers(settings: OleTiers): OleTiers {
+export function normalizeOleTiers(
+  settings: OleTiers,
+): NormalizedOleTiers {
   const expand = (values: string[], known: readonly string[]) =>
     values.includes("__all__")
       ? [...known]
       : [...new Set(values.filter((value) => known.includes(value)))];
+  const knownTiers = OLE_TIER_ORDER as readonly string[];
+  const picked = [
+    ...new Set(settings.order ?? []),
+  ].filter((tier): tier is OleTier => knownTiers.includes(tier));
   return {
+    order: [
+      ...picked,
+      ...OLE_TIER_ORDER.filter((tier) => !picked.includes(tier)),
+    ],
     type: expand(settings.type, OLE_TYPE_OPTIONS),
     region: expand(settings.region, OLE_REGION_OPTIONS),
     update: expand(settings.update, OLE_UPDATE_OPTIONS),

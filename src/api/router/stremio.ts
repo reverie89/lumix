@@ -233,54 +233,84 @@ stremioRouteConfigs.forEach((config) => {
 const asStringArray = (value: any): string[] =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 
+const KNOWN_PROVIDERS: readonly Provider[] = [
+  Provider.KISSKH,
+  Provider.OLE,
+];
+
+// The config's top-level `order` names the enabled providers in the order the
+// user picked on the page: unknown names are dropped, providers missing from
+// it are appended in canonical order.
+function normalizeProviderOrder(values: string[]): Provider[] {
+  const picked = [
+    ...new Set(
+      values
+        .map((name) => name.toLowerCase())
+        .filter((name): name is Provider =>
+          KNOWN_PROVIDERS.includes(name as Provider),
+        ),
+    ),
+  ];
+  return [
+    ...picked,
+    ...KNOWN_PROVIDERS.filter((provider) => !picked.includes(provider)),
+  ];
+}
+
 /**
  * Normalize a decoded config: validate mirrors and tier picks, expand catalog
- * ids and derive catalog/stream providers. Every provider block present in
- * the raw config contributes — a config may enable kisskh and 欧乐 together.
- * Legacy flat configs (older manifest links) fall back to their kisskh
- * catalog ids.
+ * ids and derive catalog/stream providers. Providers contribute in the
+ * config's `order` and tiers in each provider's `order` — that ordering is
+ * the catalog order the manifest carries and Stremio displays. Every provider
+ * block present in the raw config contributes — a config may enable kisskh
+ * and 欧乐 together. Legacy flat configs (older manifest links) fall back to
+ * their kisskh catalog ids.
  */
 function normalizeConfig(raw: any): UserConfig {
   const config: UserConfig = {
+    // Strict pick: anything but "zh" (absent, invalid, legacy) reads as "en"
+    language: raw?.language === "zh" ? "zh" : "en",
     providers: {},
     catalogs: [],
     catalog: [],
     stream: [],
   };
 
-  const rawKisskh = raw?.providers?.kisskh;
-  if (rawKisskh && typeof rawKisskh === "object") {
-    const tiers = normalizeKisskhTiers({
-      type: asStringArray(rawKisskh.type),
-      region: asStringArray(rawKisskh.region),
-      status: asStringArray(rawKisskh.status),
-      update: asStringArray(rawKisskh.update),
-    });
-    const mirrors = asStringArray(rawKisskh.mirrors).filter(isMirrorUrl);
-    config.providers.kisskh = { ...tiers, mirrors };
-    config.catalogs.push(
-      ...expandKisskhCatalogs(tiers),
-      ...KISSKH_HIDDEN_CATALOGS,
-    );
-    config.catalog.push(Provider.KISSKH);
-    config.stream.push(Provider.KISSKH);
-  }
-
-  const rawOle = raw?.providers?.ole;
-  if (rawOle && typeof rawOle === "object") {
-    const tiers = normalizeOleTiers({
-      type: asStringArray(rawOle.type),
-      region: asStringArray(rawOle.region),
-      update: asStringArray(rawOle.update),
-    });
-    const mirrors = asStringArray(rawOle.mirrors).filter(isMirrorUrl);
-    config.providers.ole = { ...tiers, mirrors };
-    config.catalogs.push(
-      ...expandOleCatalogs(tiers),
-      ...OLE_HIDDEN_CATALOGS,
-    );
-    config.catalog.push(Provider.OLE);
-    config.stream.push(Provider.OLE);
+  for (const provider of normalizeProviderOrder(asStringArray(raw?.order))) {
+    const rawSettings = raw?.providers?.[provider];
+    if (!rawSettings || typeof rawSettings !== "object") continue;
+    if (provider === Provider.KISSKH) {
+      const tiers = normalizeKisskhTiers({
+        order: asStringArray(rawSettings.order),
+        type: asStringArray(rawSettings.type),
+        region: asStringArray(rawSettings.region),
+        status: asStringArray(rawSettings.status),
+        update: asStringArray(rawSettings.update),
+      });
+      const mirrors = asStringArray(rawSettings.mirrors).filter(isMirrorUrl);
+      config.providers.kisskh = { ...tiers, mirrors };
+      config.catalogs.push(
+        ...expandKisskhCatalogs(tiers),
+        ...KISSKH_HIDDEN_CATALOGS,
+      );
+      config.catalog.push(Provider.KISSKH);
+      config.stream.push(Provider.KISSKH);
+    } else {
+      const tiers = normalizeOleTiers({
+        order: asStringArray(rawSettings.order),
+        type: asStringArray(rawSettings.type),
+        region: asStringArray(rawSettings.region),
+        update: asStringArray(rawSettings.update),
+      });
+      const mirrors = asStringArray(rawSettings.mirrors).filter(isMirrorUrl);
+      config.providers.ole = { ...tiers, mirrors };
+      config.catalogs.push(
+        ...expandOleCatalogs(tiers),
+        ...OLE_HIDDEN_CATALOGS,
+      );
+      config.catalog.push(Provider.OLE);
+      config.stream.push(Provider.OLE);
+    }
   }
 
   if (config.catalog.length > 0) {

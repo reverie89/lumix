@@ -1,21 +1,33 @@
 # Config page
 
 `public/landing.html`, `public/js/landing.js` and `public/css/style.css`
-form one self-contained page; these files own the on-screen mechanics (a
-Provider tab bar with one panel per provider, chip grids, TV/10-foot focus
-and hint rules). Server-side config handling is in
+form one self-contained page; these files own the on-screen mechanics
+(numbered order rows, tap-to-add chips, color-coded provider sections,
+TV/10-foot focus and hint rules). Server-side config handling is in
 [ARCHITECTURE.md](ARCHITECTURE.md); the agent rules are in the root
 [AGENTS.md](../AGENTS.md).
 
 ## Behaviors that must survive any edit
 
-- **Provider tab bar** — a tab bar holds one panel per provider: kisskh
-  (ordered mirror list + Type / Region / Status / Update tiers) and 欧乐
-  (API host list + Type / Region / Sort tiers), as chip grids.
-- **Enabled toggles** — each provider has an Enabled toggle; off leaves the
-  provider out of the config entirely. 欧乐 defaults off, so a fresh page's
-  link is kisskh-only.
-- **Tiers** — each tier needs at least one pick.
+- **Language** — the selector (English / 中文, default English) translates
+  the page and stores the config's top-level `language`, which localizes
+  the Stremio-side catalog names (`[L/欧乐] 大陆`), the manifest
+  description and TMDB text (zh fetches TMDB details with `language=zh-CN`;
+  searches stay English so title matching is unaffected).
+- **Providers** — the Provider list is the add/remove control: each added
+  provider is a numbered row (‹ › ✕), providers missing from the list sit
+  below it as tap-to-add chips, and removing keeps the picks for a re-add
+  while leaving the provider out of the config entirely (both providers
+  start enabled on a fresh page, kisskh first).
+- **Sections** — each added provider renders a color-coded section — kisskh
+  in the page's Google Blue, 欧乐 in green — holding its groups: each tier
+  is an ordered pick list with tap-to-add chips, tiers are individually
+  optional (an empty tier adds no catalogs), and a provider only needs one
+  tier with picks.
+- **Ordering** — the provider-order list (the sections stack in its order),
+  the tier-group order (‹ › in each tier legend) and the pick order within
+  each tier all flow into the config and become the catalog order Stremio
+  displays.
 
 ## Config encoding
 

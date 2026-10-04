@@ -80,8 +80,8 @@ acceptable) and a plain-language explanation for a non-technical reader.
 
 ## Config Page Guidelines
 
-- Vanilla JS chip grids: no framework, no dropdowns; native checkboxes and
-  buttons so TV D-pads can drive the form.
+- Vanilla JS ordered lists + chip grids: no framework, no dropdowns; native
+  checkboxes and buttons so TV D-pads can drive the form.
 - The behaviors that must survive any edit are pinned by tests and detailed
   in `docs/CONFIG_PAGE.md` — read it before editing the page.
 
@@ -101,7 +101,7 @@ Run the smallest relevant verification set before finishing a change:
   tests).
 - For HTTP-facing changes, run the server with a scratch env (set
   `TMDB_API_KEY` only when testing the TMDB path) and check: `/manifest.json`
-  lists the expected catalogs (default stays kisskh-only); a config-scoped
+  lists the expected catalogs (default: kisskh then 欧乐); a config-scoped
   `/catalog/...` returns metas for each enabled provider; a legacy
   (old-format) config link still resolves its kisskh catalogs.
 - Grep for identifiers you meant to purge — expect zero hits outside

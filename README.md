@@ -10,8 +10,10 @@ the env file; without it the providers' own data is used).
 
 # How to use
 
-The default config serves the provider's catalogs and streams; additional
-providers opt in from the config page's provider tab.
+The default config serves the providers' catalogs and streams; the config
+page's provider list removes or reorders them. The config
+page opens in English — pick 中文
+at the top to use it (and your Stremio catalogs) in Chinese.
 
 ## Directly from the website
 

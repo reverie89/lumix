@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- language selector (English / 中文) — localizes the config page, catalog names and the manifest description; TMDB detail fetches switch to zh-CN
+
+### Changed
+
+- the provider controls are a numbered add/remove list with stacked per-provider sections; tabs and Enabled toggles are gone
 ## [0.2.0] - 2026-10-04
 
 ### Added
@@ -31,5 +40,6 @@ Initial release of **lumix** — a Stremio addon that streams dramas, series and
 - Docker deployment — Dockerfile, docker-compose.yaml and a CI workflow publishing the image to ghcr.io; the server always listens on port 55913
 
 
+[unreleased]: https://github.com/reverie89/lumix/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/reverie89/lumix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/reverie89/lumix/releases/tag/v0.1.0
