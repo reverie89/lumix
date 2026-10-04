@@ -45,6 +45,28 @@ function copyUrl() {
   }
 }
 
+// UTF-8-safe, URL-safe base64: btoa alone throws on non-Latin-1 characters
+// (a custom mirror path can carry them), and standard base64's "+" and "/"
+// would split the manifest path into extra segments — the server decodes
+// base64url, so emit that instead
+function encodeConfig(configJson) {
+  const bytes = new TextEncoder().encode(configJson);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// Accepts both standard and URL-safe base64 (older links carry standard)
+function decodeConfig(configBase64) {
+  const binary = atob(
+    configBase64.replace(/-/g, "+").replace(/_/g, "/"),
+  );
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 const form = document.getElementById("configureForm");
 
 // Paste from the clipboard into the input field a .paste-btn targets via
@@ -88,18 +110,33 @@ document.querySelectorAll("#provider-tabs .tab").forEach((tab) => {
   });
 });
 
-// Mirrors: an ordered fallback list. The first mirror is tried first; the
-// rest take over while a mirror above them has a recent failure.
-const DEFAULT_MIRRORS = JSON.parse(
-  document.getElementById("defaultMirrors").textContent,
-);
-let orderedMirrors = [];
+// One provider entry: its panel, tier fieldsets, default mirrors, and its
+// own mirror widget state. A new provider adds a PROVIDERS entry + panel.
+// Tier keys and option values align with kisskh's vocabulary (ole's
+// "update" tier is kisskh's Update tier — both are catalog sort orders).
+const PROVIDERS = ["kisskh", "ole"];
+const PROVIDER_TIERS = {
+  kisskh: ["type", "region", "status", "update"],
+  ole: ["type", "region", "update"],
+};
+const DEFAULT_MIRRORS = {
+  kisskh: JSON.parse(document.getElementById("defaultMirrors").textContent),
+  ole: JSON.parse(
+    document.getElementById("oleDefaultMirrors").textContent,
+  ),
+};
+// 欧乐 is opt-in: a fresh visitor's manifest stays kisskh-only until the
+// 欧乐 toggle is turned on
+const FRESH_ENABLED = { kisskh: true, ole: false };
 
 function el(tag, className) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   return node;
 }
+
+// Mirrors: an ordered fallback list. The first mirror is tried first; the
+// rest take over while a mirror above them has a recent failure.
 
 // A mirror is any host the user inputs: a scheme is added automatically
 // (https unless the user typed one), paths and query strings are harmless.
@@ -124,133 +161,160 @@ function isMirrorInputValid(value) {
   }
 }
 
-function mirrorError(message) {
-  const errorEl = document.getElementById("mirror-error");
-  errorEl.textContent = message;
-  errorEl.hidden = !message;
+// One mirror widget per provider, bound to that provider's panel elements
+function createMirrorWidget(provider) {
+  let orderedMirrors = [];
+
+  const els = {
+    order: document.getElementById(`${provider}-mirror-order`),
+    moreLabel: document.getElementById(`${provider}-mirror-more-label`),
+    more: document.getElementById(`${provider}-mirror-more`),
+    input: document.getElementById(`${provider}-mirror-input`),
+    error: document.getElementById(`${provider}-mirror-error`),
+    addBtn: document.getElementById(`${provider}-mirror-add-btn`),
+  };
+
+  function mirrorError(message) {
+    els.error.textContent = message;
+    els.error.hidden = !message;
+  }
+
+  function renderMirrors() {
+    els.order.replaceChildren(
+      ...orderedMirrors.map((url, index) => {
+        const name = url.replace("https://", "");
+        const row = el("li", "mirror-row");
+        const badge = el("span", "mirror-index");
+        badge.textContent = String(index + 1);
+        const label = el("span", "mirror-name");
+        label.textContent = name;
+        label.title = url;
+        const moveUp = el("button", "mirror-btn");
+        moveUp.type = "button";
+        moveUp.textContent = "‹";
+        moveUp.setAttribute("aria-label", `Move ${name} up`);
+        moveUp.disabled = index === 0;
+        const moveDown = el("button", "mirror-btn");
+        moveDown.type = "button";
+        moveDown.textContent = "›";
+        moveDown.setAttribute("aria-label", `Move ${name} down`);
+        moveDown.disabled = index === orderedMirrors.length - 1;
+        const remove = el("button", "mirror-btn");
+        remove.type = "button";
+        remove.textContent = "✕";
+        remove.setAttribute("aria-label", `Remove ${name}`);
+        for (const btn of [moveUp, moveDown, remove]) {
+          btn.dataset.url = url;
+        }
+        moveUp.dataset.action = "up";
+        moveDown.dataset.action = "down";
+        remove.dataset.action = "remove";
+        row.append(badge, label, moveUp, moveDown, remove);
+        return row;
+      }),
+    );
+
+    // Defaults not picked live in the "More mirrors" grid; custom mirrors
+    // only exist while they are part of the order (re-addable via the input)
+    const more = DEFAULT_MIRRORS[provider].filter(
+      (url) => !orderedMirrors.includes(url),
+    );
+    els.moreLabel.hidden = more.length === 0;
+    els.more.hidden = more.length === 0;
+    els.more.replaceChildren(
+      ...more.map((url) => {
+        const option = el("span", "chip-option");
+        const chip = el("button", "chip");
+        chip.type = "button";
+        chip.textContent = url.replace("https://", "");
+        chip.title = url;
+        chip.setAttribute("aria-label", `Add ${url} as a fallback mirror`);
+        chip.dataset.url = url;
+        option.append(chip);
+        return option;
+      }),
+    );
+  }
+
+  function addCustomMirror() {
+    const input = els.input;
+    const value = normalizeMirrorInput(input.value);
+    if (!value) return;
+    if (!isMirrorInputValid(value)) {
+      mirrorError("Not a valid mirror host");
+      return;
+    }
+    if (orderedMirrors.includes(value)) {
+      mirrorError("Mirror already added");
+      return;
+    }
+    mirrorError(null);
+    input.value = "";
+    orderedMirrors.push(value);
+    renderMirrors();
+    updateManifestUrl();
+  }
+
+  els.order.addEventListener("click", (e) => {
+    const btn = e.target.closest(".mirror-btn");
+    if (!btn) return;
+    const url = btn.dataset.url;
+    const index = orderedMirrors.indexOf(url);
+    if (index === -1) return;
+    if (btn.dataset.action === "remove") {
+      orderedMirrors.splice(index, 1);
+    } else if (btn.dataset.action === "up" && index > 0) {
+      [orderedMirrors[index - 1], orderedMirrors[index]] = [
+        orderedMirrors[index],
+        orderedMirrors[index - 1],
+      ];
+    } else if (
+      btn.dataset.action === "down" &&
+      index < orderedMirrors.length - 1
+    ) {
+      [orderedMirrors[index + 1], orderedMirrors[index]] = [
+        orderedMirrors[index],
+        orderedMirrors[index + 1],
+      ];
+    }
+    renderMirrors();
+    updateManifestUrl();
+  });
+
+  // Tapping a "More mirrors" chip appends it as the last fallback
+  els.more.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    orderedMirrors.push(chip.dataset.url);
+    renderMirrors();
+    updateManifestUrl();
+  });
+
+  els.addBtn.addEventListener("click", addCustomMirror);
+  els.input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addCustomMirror();
+    }
+  });
+  els.input.addEventListener("input", () => {
+    mirrorError(null);
+  });
+
+  return {
+    render: renderMirrors,
+    get mirrors() {
+      return [...orderedMirrors];
+    },
+    setMirrors(mirrors) {
+      orderedMirrors = [...mirrors];
+    },
+  };
 }
 
-function renderMirrors() {
-  const orderEl = document.getElementById("mirror-order");
-  orderEl.replaceChildren(
-    ...orderedMirrors.map((url, index) => {
-      const name = url.replace("https://", "");
-      const row = el("li", "mirror-row");
-      const badge = el("span", "mirror-index");
-      badge.textContent = String(index + 1);
-      const label = el("span", "mirror-name");
-      label.textContent = name;
-      label.title = url;
-      const moveUp = el("button", "mirror-btn");
-      moveUp.type = "button";
-      moveUp.textContent = "‹";
-      moveUp.setAttribute("aria-label", `Move ${name} up`);
-      moveUp.disabled = index === 0;
-      const moveDown = el("button", "mirror-btn");
-      moveDown.type = "button";
-      moveDown.textContent = "›";
-      moveDown.setAttribute("aria-label", `Move ${name} down`);
-      moveDown.disabled = index === orderedMirrors.length - 1;
-      const remove = el("button", "mirror-btn");
-      remove.type = "button";
-      remove.textContent = "✕";
-      remove.setAttribute("aria-label", `Remove ${name}`);
-      for (const btn of [moveUp, moveDown, remove]) {
-        btn.dataset.url = url;
-      }
-      moveUp.dataset.action = "up";
-      moveDown.dataset.action = "down";
-      remove.dataset.action = "remove";
-      row.append(badge, label, moveUp, moveDown, remove);
-      return row;
-    }),
-  );
-
-  // Defaults not picked live in the "More mirrors" grid; custom mirrors only
-  // exist while they are part of the order (re-addable via the input).
-  const more = DEFAULT_MIRRORS.filter((url) => !orderedMirrors.includes(url));
-  document.getElementById("mirror-more-label").hidden = more.length === 0;
-  const moreEl = document.getElementById("mirror-more");
-  moreEl.hidden = more.length === 0;
-  moreEl.replaceChildren(
-    ...more.map((url) => {
-      const option = el("span", "chip-option");
-      const chip = el("button", "chip");
-      chip.type = "button";
-      chip.textContent = url.replace("https://", "");
-      chip.title = url;
-      chip.setAttribute("aria-label", `Add ${url} as a fallback mirror`);
-      chip.dataset.url = url;
-      option.append(chip);
-      return option;
-    }),
-  );
-}
-
-document.getElementById("mirror-order").addEventListener("click", (e) => {
-  const btn = e.target.closest(".mirror-btn");
-  if (!btn) return;
-  const url = btn.dataset.url;
-  const index = orderedMirrors.indexOf(url);
-  if (index === -1) return;
-  if (btn.dataset.action === "remove") {
-    orderedMirrors.splice(index, 1);
-  } else if (btn.dataset.action === "up" && index > 0) {
-    [orderedMirrors[index - 1], orderedMirrors[index]] = [
-      orderedMirrors[index],
-      orderedMirrors[index - 1],
-    ];
-  } else if (
-    btn.dataset.action === "down" &&
-    index < orderedMirrors.length - 1
-  ) {
-    [orderedMirrors[index + 1], orderedMirrors[index]] = [
-      orderedMirrors[index],
-      orderedMirrors[index + 1],
-    ];
-  }
-  renderMirrors();
-  updateManifestUrl();
-});
-
-// Tapping a "More mirrors" chip appends it as the last fallback
-document.getElementById("mirror-more").addEventListener("click", (e) => {
-  const chip = e.target.closest(".chip");
-  if (!chip) return;
-  orderedMirrors.push(chip.dataset.url);
-  renderMirrors();
-  updateManifestUrl();
-});
-
-function addCustomMirror() {
-  const input = document.getElementById("mirror-input");
-  const value = normalizeMirrorInput(input.value);
-  if (!value) return;
-  if (!isMirrorInputValid(value)) {
-    mirrorError("Not a valid mirror host");
-    return;
-  }
-  if (orderedMirrors.includes(value)) {
-    mirrorError("Mirror already added");
-    return;
-  }
-  mirrorError(null);
-  input.value = "";
-  orderedMirrors.push(value);
-  renderMirrors();
-  updateManifestUrl();
-}
-
-document.getElementById("mirror-add-btn").addEventListener("click", addCustomMirror);
-document.getElementById("mirror-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    addCustomMirror();
-  }
-});
-document.getElementById("mirror-input").addEventListener("input", () => {
-  mirrorError(null);
-});
+const mirrorWidgets = Object.fromEntries(
+  PROVIDERS.map((provider) => [provider, createMirrorWidget(provider)]),
+);
 
 // Tiers: native checkboxes. "All" is a master toggle: it selects every
 // option of its tier, or clears the tier when everything is already
@@ -272,12 +336,77 @@ document.querySelectorAll(".config-group[data-tier]").forEach((group) => {
   });
 });
 
-function getTierValues(tier) {
-  const group = document.querySelector(`.config-group[data-tier="${tier}"]`);
+function getTierValues(provider, tier) {
+  const group = document.querySelector(
+    `.tab-panel[data-provider="${provider}"] .config-group[data-tier="${tier}"]`,
+  );
   return [...group.querySelectorAll("input[type='checkbox']:checked")]
     .map((cb) => cb.value)
     .filter((value) => value !== "__all__");
 }
+
+function setTierValues(provider, valuesByTier) {
+  for (const tier of PROVIDER_TIERS[provider]) {
+    const group = document.querySelector(
+      `.tab-panel[data-provider="${provider}"] .config-group[data-tier="${tier}"]`,
+    );
+    const values = Array.isArray(valuesByTier?.[tier])
+      ? valuesByTier[tier]
+      : [];
+    const expandAll = values.includes("__all__");
+    group.querySelectorAll("input[type='checkbox']").forEach((cb) => {
+      cb.checked =
+        cb.value === "__all__"
+          ? false
+          : expandAll || values.includes(cb.value);
+    });
+  }
+}
+
+const isEnabled = (provider) =>
+  document.getElementById(`${provider}-enabled`).checked;
+
+// A disabled provider's fieldsets are muted (native disabled semantics work
+// on TV D-pads) and left out of the config entirely
+function setEnabled(provider, enabled) {
+  document.getElementById(`${provider}-enabled`).checked = enabled;
+  document
+    .querySelectorAll(`.tab-panel[data-provider="${provider}"] fieldset:not(.provider-enable-group)`)
+    .forEach((fieldset) => {
+      fieldset.disabled = !enabled;
+    });
+}
+
+// Turning a provider on starts from the same full selection a fresh page
+// shows: default mirrors and every tier option ticked, ready to trim
+function seedProviderDefaults(provider) {
+  const widget = mirrorWidgets[provider];
+  if (widget.mirrors.length === 0) {
+    widget.setMirrors(DEFAULT_MIRRORS[provider]);
+    widget.render();
+  }
+  for (const tier of PROVIDER_TIERS[provider]) {
+    if (getTierValues(provider, tier).length > 0) continue;
+    document
+      .querySelector(
+        `.tab-panel[data-provider="${provider}"] .config-group[data-tier="${tier}"]`,
+      )
+      .querySelectorAll("input[type='checkbox']")
+      .forEach((cb) => {
+        cb.checked = cb.value !== "__all__";
+      });
+  }
+}
+
+// Per-provider toggle wiring (the form-level change listener only refreshes
+// the manifest url; seeding must run before it)
+document.querySelectorAll(".provider-toggle").forEach((toggle) => {
+  toggle.addEventListener("change", () => {
+    const provider = toggle.id.replace(/-enabled$/, "");
+    if (toggle.checked) seedProviderDefaults(provider);
+    setEnabled(provider, toggle.checked);
+  });
+});
 
 const defaultConfig = JSON.parse(
   document.getElementById("defaultConfig").textContent,
@@ -288,33 +417,40 @@ form.addEventListener("change", function () {
   updateManifestUrl();
 });
 
-function validationError(kisskh) {
-  if (kisskh.mirrors.length === 0) return "Select at least one mirror";
-  for (const [tier, label] of [
-    ["type", "type"],
-    ["region", "region"],
-    ["status", "status"],
-    ["update", "update"],
-  ]) {
-    if (kisskh[tier].length === 0) return `Select at least one ${label}`;
+function collectProvider(provider) {
+  const settings = { mirrors: mirrorWidgets[provider].mirrors };
+  for (const tier of PROVIDER_TIERS[provider]) {
+    settings[tier] = getTierValues(provider, tier);
+  }
+  return settings;
+}
+
+function validationError(provider, settings) {
+  if (settings.mirrors.length === 0) {
+    return `${provider}: select at least one mirror`;
+  }
+  for (const tier of PROVIDER_TIERS[provider]) {
+    if (settings[tier].length === 0) {
+      return `${provider}: select at least one ${tier}`;
+    }
   }
   return null;
 }
 
 function updateManifestUrl() {
-  const kisskh = {
-    mirrors: [...orderedMirrors],
-    type: getTierValues("type"),
-    region: getTierValues("region"),
-    status: getTierValues("status"),
-    update: getTierValues("update"),
-  };
-  const config = {
-    providers: { kisskh },
-  };
+  const providers = {};
+  let error = null;
+  for (const provider of PROVIDERS) {
+    if (!isEnabled(provider)) continue;
+    const settings = collectProvider(provider);
+    error = error || validationError(provider, settings);
+    providers[provider] = settings;
+  }
+  if (!error && Object.keys(providers).length === 0) {
+    error = "Enable at least one provider";
+  }
 
   const hint = document.getElementById("config-hint");
-  const error = validationError(kisskh);
   if (error) {
     hint.textContent = error;
     hint.style.display = "block";
@@ -323,45 +459,54 @@ function updateManifestUrl() {
   }
   hint.style.display = "none";
 
-  const configJson = JSON.stringify(config);
-  const configBase64 = btoa(configJson);
+  const configJson = JSON.stringify({ providers });
+  const configBase64 = encodeConfig(configJson);
   const manifestUrl =
     window.location.origin + "/" + configBase64 + "/manifest.json";
   setInstallUrl(manifestUrl);
 }
 
 // Update config redirect from stremio (/config64/configure). Fresh visitors
-// get all default mirrors pre-selected in fallback order; a restored config
-// reinstates its own order, including custom mirrors.
+// get every provider's default mirrors pre-selected in fallback order; a
+// restored config reinstates its own order, including custom mirrors, and
+// enables exactly the providers it carries.
 document.addEventListener("DOMContentLoaded", () => {
   const path = window.location.pathname;
   const match = path.match(/\/(.+)\/configure/);
   const hasConfig = match && match[1];
   let config;
   try {
-    config = hasConfig ? JSON.parse(atob(match[1])) : defaultConfig;
+    config = hasConfig ? JSON.parse(decodeConfig(match[1])) : defaultConfig;
   } catch (error) {
     console.error("Failed to decode configuration:", error);
     config = defaultConfig;
   }
   try {
-    const kisskh = config.providers?.kisskh;
-    orderedMirrors = hasConfig
-      ? [...(Array.isArray(kisskh?.mirrors) ? kisskh.mirrors : [])]
-      : [...DEFAULT_MIRRORS];
-    for (const tier of ["type", "region", "status", "update"]) {
-      const group = document.querySelector(`.config-group[data-tier="${tier}"]`);
-      const values = Array.isArray(kisskh?.[tier]) ? kisskh[tier] : [];
-      const expandAll = values.includes("__all__");
-      group.querySelectorAll("input[type='checkbox']").forEach((cb) => {
-        cb.checked =
-          cb.value === "__all__"
-            ? false
-            : expandAll || values.includes(cb.value);
-      });
+    for (const provider of PROVIDERS) {
+      const settings = config.providers?.[provider];
+      const enabled = hasConfig ? !!settings : FRESH_ENABLED[provider];
+      setEnabled(provider, enabled);
+      mirrorWidgets[provider].setMirrors(
+        enabled
+          ? (hasConfig
+              ? Array.isArray(settings?.mirrors)
+                ? settings.mirrors
+                : []
+              : DEFAULT_MIRRORS[provider])
+          : [],
+      );
+      if (enabled) {
+        // Fresh pages tick every option of every tier (the "__all__"
+        // semantics of the server's default config) so enabling a provider
+        // instantly passes validation
+        const freshTiers = Object.fromEntries(
+          PROVIDER_TIERS[provider].map((tier) => [tier, ["__all__"]]),
+        );
+        setTierValues(provider, hasConfig ? settings : freshTiers);
+      }
+      mirrorWidgets[provider].render();
     }
     // After applying saved config, update the install links
-    renderMirrors();
     updateManifestUrl();
   } catch (error) {
     console.error("Failed to decode configuration:", error);

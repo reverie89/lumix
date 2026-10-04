@@ -18,6 +18,7 @@ import {
 } from "../db/queries.js";
 import ProviderService from "../service/provider/provider-service.js";
 import { KisskhScraper } from "../source/kisskh.js";
+import { OleScraper } from "../source/ole.js";
 import { ContentDetail } from "../source/meta.js";
 import { BaseProvider, Provider } from "../source/provider.js";
 import { tmdb, isTmdbEnabled } from "../source/tmdb.js";
@@ -28,7 +29,8 @@ import { Logger } from "../utils/logger.js";
 import { defaultConfig, Prefix, UserConfig } from "./manifest.js";
 
 const kisskh = new KisskhScraper(Provider.KISSKH);
-const providers: BaseProvider[] = [kisskh];
+const ole = new OleScraper(Provider.OLE);
+export const providers: BaseProvider[] = [kisskh, ole];
 const logger = new Logger("ADDON");
 
 // Empty/error results are cached briefly so a dead upstream or unresolvable
@@ -173,6 +175,84 @@ async function getContent(
       }
       if (!content) {
         logger.error(`Not found kisskh ${kisskhId}`);
+        return null;
+      }
+      // Copy before setting season/episode: the cached entry is shared
+      // between concurrent requests for different episodes of the same show
+      return {
+        ...content,
+        season: season ? parseInt(season) : 1,
+        episode: episode ? parseInt(episode) : 1,
+      };
+    }
+    case args.id.startsWith(Prefix.OLE): {
+      // id | ole:vodId:season:episode
+      const [prefix, oleId, season, episode] = args.id.split(":");
+      if (!oleId) return null;
+      const contentType = args.type === "series" ? "series" : "movie";
+      const contentKey = `content:ole:${oleId}`;
+      const cacheContent = cache.get(contentKey);
+      let content: ContentDetail | null = cacheContent;
+      if (!content) {
+        const dbContent = await ProviderService.getDbContent(
+          contentType,
+          { oleId },
+          parseInt(season ?? "1"),
+        );
+        if (dbContent) {
+          logger.log(`Found DB content ${contentKey}`);
+          content = dbContent;
+        }
+      }
+      if (!content) {
+        const providerContent = await getProviderContentById(
+          `${prefix}:${oleId}`,
+        );
+        if (providerContent) {
+          content = {
+            id: oleId,
+            oleId: oleId,
+            type: args.type,
+            title: providerContent.title,
+            year: providerContent.year,
+            season: season ? parseInt(season) : 1,
+            episode: episode ? parseInt(episode) : 1,
+          };
+        } else {
+          const { name, year: detailYear } = await ole.getDetail(
+            oleId,
+            config,
+          );
+          const extracted = extractTitle(name);
+          const pureTitle = extracted.title;
+          const year =
+            extracted.year ||
+            (Number.isFinite(parseInt(detailYear ?? ""))
+              ? parseInt(detailYear!)
+              : new Date().getFullYear());
+          content = {
+            id: oleId,
+            oleId: oleId,
+            type: args.type,
+            title: pureTitle,
+            year: year,
+            season: season ? parseInt(season) : 1,
+            episode: episode ? parseInt(episode) : 1,
+          };
+          const newProviderContent: ProviderContentInsertInput = {
+            id: `${Prefix.OLE}:${oleId}`,
+            contentId: null,
+            provider: Provider.OLE,
+            externalId: oleId,
+            title: pureTitle,
+            year: year,
+          };
+          upsertProviderContent(newProviderContent);
+        }
+        cache.set(contentKey, content, TTL_MS.content);
+      }
+      if (!content) {
+        logger.error(`Not found ole ${oleId}`);
         return null;
       }
       // Copy before setting season/episode: the cached entry is shared

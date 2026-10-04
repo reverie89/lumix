@@ -20,48 +20,61 @@ live in the root [AGENTS.md](../AGENTS.md).
 ## The config path
 
 1. `public/js/landing.js` collects the form into
-   `{ providers: { kisskh: { mirrors, type, region, status, update } } }`,
-   base64-encodes it and shows `/{configBase64}/manifest.json`.
+   `{ providers: { kisskh: { mirrors, type, region, status, update }, ole: { mirrors, type, region, update } } }`,
+   base64url-encodes it and shows `/{configBase64}/manifest.json`. Only
+   Enabled providers are included; a provider toggled on starts from its
+   full default selection.
 2. `decodeConfig` (`src/api/router/stremio.ts`) decodes and **normalizes**:
    a mirror is any http(s) URL (the page auto-prefixes `https://`), tier
    picks are filtered to known options (`__all__` expands), and catalog ids
-   are expanded server-side. Never trust a decoded config's shape —
-   `stremio.test.ts` pins each rule.
+   are expanded server-side. Every provider block present contributes — a
+   config may enable kisskh and 欧乐 together. Never trust a decoded
+   config's shape — `stremio.test.ts` pins each rule.
 3. `buildManifest(config)` turns the expanded `catalogs` into Stremio catalog
    declarations; the handlers in `src/lib/addon.ts` gate every request
    through `filterProvider` (config's `catalog`/`stream` lists).
 
 ## Provider catalogs are the single sources of truth
 
-`src/source/kisskh-catalogs.ts` is the single source of truth for kisskh
-categories: tier option lists, `expandKisskhCatalogs` (tier picks → catalog
-ids, used by both the page's server-side expansion and the manifest builder)
-and `getKisskhQuery` (catalog name → upstream API query). A category change
-touches this file and `landing.html` — nothing else. Its unit tests pin the
-row-expansion rules (each pick is its own row; region/update add a series +
-movies pair; status rows are series-only; US queries the Hollywood type).
+`src/source/kisskh-catalogs.ts` and `src/source/ole-catalogs.ts` are the
+single sources of truth for their provider's categories: tier option lists,
+`expandKisskhCatalogs`/`expandOleCatalogs` (tier picks → catalog ids,
+used by both the page's server-side expansion and the manifest builder) and
+`getKisskhQuery`/`getOleQuery` (catalog name → upstream API query).
+Option names are shared where the concept is shared (Korean, TVSeries,
+Update…) — each catalogs file maps them to its own upstream API values. A
+category change touches the catalogs file and `landing.html` — nothing
+else. Their unit tests pin the row-expansion rules (each type pick is its
+own row; region/update picks add a series + movies pair; kisskh status rows
+are series-only; kisskh US queries the Hollywood type; ole Movies is the
+only movie-side type).
 
 ## Hosts and subtitles
 
 `isKisskhHost` (`src/utils/format.ts`, second-level label rule) classifies
 hosts for the axios client selection (`src/utils/axios.ts`: mirrors on
-kisskh domains get the no-redirect client) — it does not validate user
-mirrors (`isMirrorUrl`, same file: a mirror is any http(s) URL). Subtitles
-are separate: `isSubtitleSourceHost` (`kisskh-catalogs.ts`) owns the static
-`/subtitle` allowlist, its tests pin the tricky cases
-(`cdnvideo11.shop.evil.com` must not pass), and other-host origins are
-admitted at runtime via the seen-subtitle-origin registry in `kisskh.ts`.
+kisskh domains get the no-redirect client; ole's API host uses the
+default client) — it does not validate user mirrors (`isMirrorUrl`, same
+file: a mirror is any http(s) URL). Subtitles are separate:
+`isSubtitleSourceHost` (`kisskh-catalogs.ts`) owns the static `/subtitle`
+allowlist, its tests pin the tricky cases (`cdnvideo11.shop.evil.com` must
+not pass), and other-host origins are admitted at runtime via the
+seen-subtitle-origin registry in `kisskh.ts`. ole serves no subtitle
+files (subs are hardcoded upstream) — its `getSubtitles` returns `[]`.
 
 ## Mirrors
 
-kisskh has no single canonical domain; a mirror is any http(s) URL the user
-inputs. The defaults live in `utils/constant.ts KISSKH_DEFAULT_MIRRORS`.
-Requests walk the picked mirrors in the user's chosen order, skipping
-mirrors with a failure in the last `KISSKH_FAIL_TTL_MS` and otherwise
-falling back to the best success/fail ratio (`selectKisskhUrl` in
-`src/source/kisskh.ts`). Tier picks default to `__all__`, which
-`normalizeKisskhTiers` expands server-side to every option of the tier. The
-page-side mirror UX is in [CONFIG_PAGE.md](CONFIG_PAGE.md).
+kisskh has no single canonical domain; ole's picks are its API hosts
+(not web mirrors); a mirror is any http(s) URL the user inputs. The
+defaults live in `utils/constant.ts KISSKH_DEFAULT_MIRRORS` /
+`OLE_DEFAULT_MIRRORS`. Requests walk the picked mirrors in the user's
+chosen order, skipping mirrors with a failure in the last
+`MIRROR_FAIL_TTL_MS` and otherwise falling back to the best success/fail
+ratio (`MirrorFailover` in `src/service/mirror-failover.ts`, one instance
+per provider). Tier picks default to `__all__`, which
+`normalizeKisskhTiers`/`normalizeOleTiers` expand server-side to every
+option of the tier. The page-side mirror UX is in
+[CONFIG_PAGE.md](CONFIG_PAGE.md).
 
 ## Provider contract and vocabulary
 

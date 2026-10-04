@@ -11,7 +11,7 @@ const KISSKH_TYPE_OPTIONS = [
   "Hollywood",
 ] as const;
 const KISSKH_STATUS_OPTIONS = ["Ongoing", "Completed"] as const;
-const KISSKH_UPDATE_OPTIONS = ["Popular", "Latest", "Newest"] as const;
+const KISSKH_UPDATE_OPTIONS = ["Popular", "Last Update", "Release Date"] as const;
 const KISSKH_REGION_OPTIONS = [
   "Korean",
   "Chinese",
@@ -48,10 +48,12 @@ const API_COUNTRY: Record<string, string> = {
   Indian: "13",
   Malaysian: "14",
 };
+// kisskh API `order` param — the labels are kisskh's own Explore filter
+// (Popular / Last Update / Release Date).
 const API_UPDATE: Record<string, string> = {
   Popular: "1",
-  Latest: "2",
-  Newest: "3",
+  "Last Update": "2",
+  "Release Date": "3",
 };
 
 export interface KisskhQuery {
@@ -75,7 +77,7 @@ export function getKisskhQuery(
     type: type === "movie" ? API_TYPE.movie : API_TYPE.series,
     country: "0",
     status: "0",
-    order: "2",
+    order: "2", // kisskh's own Explore default: Last Update
   };
   switch (name) {
     case "TVSeries":
@@ -173,20 +175,6 @@ export function normalizeKisskhTiers(settings: KisskhTiers): KisskhTiers {
     status: expand(settings.status, KISSKH_STATUS_OPTIONS),
     update: expand(settings.update, KISSKH_UPDATE_OPTIONS),
   };
-}
-
-/**
- * A mirror is any http(s) URL the user inputs — the upstream API is what
- * defines compatibility, not the hostname. Requests use the origin; paths
- * and query strings in the input are harmless.
- */
-export function isMirrorUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 /**

@@ -15,7 +15,7 @@ const tierConfig = {
       type: ["TVSeries", "Bogus"],
       region: ["Korean", "Atlantis"],
       status: ["Completed"],
-      update: ["Latest"],
+      update: ["Last Update"],
     },
   },
 };
@@ -23,19 +23,86 @@ const tierConfig = {
 describe("decodeConfig", () => {
   it("normalizes mirrors and tier picks", () => {
     const config = decodeConfig(encode(tierConfig));
-    expect(config.providers.kisskh?.mirrors).toEqual([
-      "https://kisskh.example.evil.com",
-      "https://other.com",
-    ]);
-    expect(config.providers.kisskh?.type).toEqual(["TVSeries"]);
-    expect(config.providers.kisskh?.region).toEqual(["Korean"]);
-    expect(config.providers.kisskh?.status).toEqual(["Completed"]);
-    expect(config.providers.kisskh?.update).toEqual(["Latest"]);
+    expect(config.providers.kisskh).toEqual({
+      mirrors: [
+        "https://kisskh.example.evil.com",
+        "https://other.com",
+      ],
+      type: ["TVSeries"],
+      region: ["Korean"],
+      status: ["Completed"],
+      update: ["Last Update"],
+    });
     expect(config.catalog).toEqual([Provider.KISSKH]);
     expect(config.stream).toEqual([Provider.KISSKH]);
     expect(config.catalogs).toContain("kisskh.series.TVSeries");
     expect(config.catalogs).toContain("kisskh.series.Korean");
     expect(config.catalogs).toContain("kisskh.series.Search");
+  });
+
+  it("normalizes ole tiers and keeps both providers when both are picked", () => {
+    const config = decodeConfig(
+      encode({
+        providers: {
+          kisskh: { mirrors: [], type: ["TVSeries"], region: [], status: [], update: [] },
+          ole: {
+            type: ["Movies", "TVSeries"],
+            region: ["Korean", "午夜影院"],
+            update: ["Popular"],
+          },
+        },
+      }),
+    );
+    expect(config.providers.ole).toEqual({
+      mirrors: [],
+      type: ["Movies", "TVSeries"],
+      region: ["Korean"],
+      update: ["Popular"],
+    });
+    expect(config.catalog).toEqual([Provider.KISSKH, Provider.OLE]);
+    expect(config.stream).toEqual([Provider.KISSKH, Provider.OLE]);
+    expect(config.catalogs).toContain("ole.movie.Movies");
+    expect(config.catalogs).toContain("ole.series.TVSeries");
+    expect(config.catalogs).toContain("ole.movie.Korean");
+    expect(config.catalogs).toContain("ole.series.Search");
+    // kisskh catalogs survive the merge
+    expect(config.catalogs).toContain("kisskh.series.TVSeries");
+  });
+
+  it("expands ole __all__ tiers", () => {
+    const config = decodeConfig(
+      encode({
+        providers: {
+          ole: {
+            mirrors: [],
+            type: ["__all__"],
+            region: ["__all__"],
+            update: ["__all__"],
+          },
+        },
+      }),
+    );
+    expect(config.catalog).toEqual([Provider.OLE]);
+    expect(config.catalogs).toContain("ole.series.ShortDrama");
+    expect(config.catalogs).toContain("ole.movie.Australian");
+    expect(config.catalogs).toContain("ole.movie.Score");
+  });
+
+  it("decodes base64url configs (the config page emits url-safe base64)", () => {
+    // The page emits base64url so a config can never split the URL path;
+    // decodeConfig accepts both alphabets
+    const config64 = Buffer.from(
+      JSON.stringify({
+        providers: {
+          ole: { mirrors: [], type: ["TVSeries"], region: ["Korean"], update: [] },
+        },
+      }),
+      "utf-8",
+    ).toString("base64url");
+    expect(config64).not.toMatch(/[+/=]/);
+    const config = decodeConfig(config64);
+    expect(config.providers.ole).toMatchObject({ type: ["TVSeries"], region: ["Korean"] });
+    expect(config.catalog).toEqual([Provider.OLE]);
   });
 
   it("falls back to the default config on malformed input", () => {

@@ -1,5 +1,7 @@
+import type { ContentType } from "@stremio-addon/sdk";
 import { uuidv7 } from "uuidv7";
 import {
+  getContentByProviderId,
   getContentByTmdb,
   getContentJoinProviderById,
   getCountProviderContent,
@@ -8,7 +10,7 @@ import {
   upsertContent,
   upsertProviderContent,
 } from "../../db/queries.js";
-import { Prefix, UserConfig } from "../../lib/manifest.js";
+import { UserConfig } from "../../lib/manifest.js";
 import { ContentDetail, ContentId } from "../../source/meta.js";
 import { Provider } from "../../source/provider.js";
 import { tmdb, isTmdbEnabled } from "../../source/tmdb.js";
@@ -18,6 +20,33 @@ class ProviderService {
   static async getTotalProviderContent() {
     const count = await getCountProviderContent();
     return Number(count?.[0]?.count ?? 0);
+  }
+
+  /**
+   * Poster for a catalog item, DB-first: a provider id already linked to a
+   * content row resolves its stored TMDB art with no TMDB call, so cold
+   * catalogs after a restart never re-search known titles. Unmapped titles
+   * search TMDB once (callers persist the new mapping); a miss or a disabled
+   * TMDB key falls back to the provider's own image.
+   */
+  static async resolveProviderPoster(
+    provider: Provider,
+    externalId: number | string,
+    title: string,
+    fallback: string,
+    type: ContentType,
+  ): Promise<{ poster: string; detail: ContentDetail | null }> {
+    const linked = await getContentByProviderId(
+      `${provider}:${externalId}`,
+    );
+    if (linked) {
+      return { poster: linked.poster || fallback, detail: null };
+    }
+    if (!isTmdbEnabled()) {
+      return { poster: fallback, detail: null };
+    }
+    const detail = await tmdb.searchDetail(title, type);
+    return { poster: detail?.thumbnail || fallback, detail };
   }
 
   static async getSameProviderContent(id: string) {
@@ -37,7 +66,7 @@ class ProviderService {
     type: "movie" | "series",
     contentId: ContentId,
   ) {
-    const { imdbId, tmdbId, kisskhId } = contentId;
+    const { imdbId, tmdbId, kisskhId, oleId } = contentId;
     const hasMetaId = imdbId || tmdbId;
     if (hasMetaId) {
       const dbContentAndProvider = await getContentJoinProviderById(
@@ -54,10 +83,16 @@ class ProviderService {
         return dbContentAndProvider;
       }
     }
-    if (kisskhId) {
-      const id = `${Prefix.KISSKH}:${kisskhId}`;
-      const dbContentAndProvider =
-        await ProviderService.getSameProviderContent(id);
+    // Provider-scoped ids probe their own row (`{provider}:{externalId}`)
+    const providerIds: [Provider, string | undefined][] = [
+      [Provider.KISSKH, kisskhId],
+      [Provider.OLE, oleId],
+    ];
+    for (const [provider, externalId] of providerIds) {
+      if (!externalId) continue;
+      const dbContentAndProvider = await ProviderService.getSameProviderContent(
+        `${provider}:${externalId}`,
+      );
       const providerContents = dbContentAndProvider?.providerContent;
       if (
         dbContentAndProvider &&
@@ -76,8 +111,9 @@ class ProviderService {
     season: number,
   ) {
     let dbContent: ContentDetail | null = null;
-    const { imdbId, tmdbId, kisskhId } = contentId;
-    const id: string | undefined = imdbId ?? tmdbId?.toString() ?? kisskhId;
+    const { imdbId, tmdbId, kisskhId, oleId } = contentId;
+    const id: string | undefined =
+      imdbId ?? tmdbId?.toString() ?? kisskhId ?? oleId;
     if (!id) return null;
     const dbContentAndProvider = await ProviderService.getContentAndProvider(
       type,
@@ -109,6 +145,7 @@ class ProviderService {
         season = extractedTitle.season ?? 1;
       }
     }
+    if (oleId) dbContent.oleId = oleId;
     dbProviderContent.forEach((providerContent) => {
       const extractedTitle = extractTitle(providerContent.title);
       const extractedSeason = extractedTitle.season ?? 1;
@@ -119,6 +156,13 @@ class ProviderService {
       ) {
         dbContent.kisskhId = providerContent.externalId;
         dbContent.title = providerContent.title;
+      }
+      if (
+        providerContent.provider === Provider.OLE &&
+        !oleId &&
+        extractedSeason === season
+      ) {
+        dbContent.oleId = providerContent.externalId;
       }
     });
     return dbContent;

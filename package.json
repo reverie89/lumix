@@ -1,6 +1,6 @@
 {
   "name": "lumix",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stream dramas, series and movies",
   "scripts": {
     "start": "node --env-file=.env dist/server.js",

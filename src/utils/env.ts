@@ -38,6 +38,7 @@ const envSchema = z.object({
   // Provider mirror defaults (comma-separated http(s) URLs): served to the
   // config page's mirror rows and used when a config carries no mirrors
   KISSKH_MIRRORS: stringList,
+  OLE_HOSTS: stringList,
 
   // Server configuration
   // Rate-limit keys come from x-forwarded-for/cf-connecting-ip; set false to

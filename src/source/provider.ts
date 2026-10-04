@@ -6,13 +6,15 @@ import {
   Stream,
   Subtitle,
 } from "@stremio-addon/sdk";
+import { MirrorFailover } from "../service/mirror-failover.js";
 import { Prefix, UserConfig } from "../lib/manifest.js";
-import { DISPLAY_NAME } from "../utils/constant.js";
+import { PROVIDER_LABELS, SHORT_NAME } from "../utils/constant.js";
 import { Logger } from "../utils/logger.js";
 import { ContentDetail } from "./meta.js";
 
 export enum Provider {
   KISSKH = "kisskh",
+  OLE = "ole",
 }
 
 export abstract class BaseProvider {
@@ -29,11 +31,24 @@ export abstract class BaseProvider {
   readonly displayName: string;
   name: Provider;
   abstract supportedPrefix: Prefix[];
+  // Every provider fronts a configurable mirror list; its failover instance
+  // owns the origin-keyed success/fail memory
+  abstract readonly defaultMirrors: string[];
+  abstract readonly failover: MirrorFailover;
 
   constructor(name: Provider) {
     this.name = name;
     this.logger = new Logger(name);
-    this.displayName = `${DISPLAY_NAME}: ${name}`;
+    this.displayName = `${SHORT_NAME}/${PROVIDER_LABELS[this.name] ?? this.name}`;
+  }
+
+  /**
+   * Mirror candidates for a request: the user's picked mirrors when set,
+   * otherwise the built-in defaults.
+   */
+  mirrors(config?: UserConfig): string[] {
+    const mirrors = config?.providers?.[this.name]?.mirrors;
+    return mirrors && mirrors.length > 0 ? mirrors : this.defaultMirrors;
   }
 
   abstract searchCatalog(

@@ -4,12 +4,14 @@
 
 # lumix
 
-A stremio addon to stream dramas, series and movies. Enriched with [TMDB](https://themoviedb.org) artwork and descriptions
-(set `TMDB_API_KEY` in the env file; without it the provider's own data is used).
+A stremio addon to stream dramas, series and movies. Enriched with
+[TMDB](https://themoviedb.org) artwork and descriptions (set `TMDB_API_KEY` in
+the env file; without it the providers' own data is used).
 
 # How to use
 
-The default config serves the provider's catalogs and streams.
+The default config serves the provider's catalogs and streams; additional
+providers opt in from the config page's provider tab.
 
 ## Directly from the website
 
@@ -36,6 +38,8 @@ services:
       # to watch until these hold working values
       ## kisskh mirrors served to the config page and used when a config carries no mirrors (comma-separated http(s) URLs, tried in order) | none
       - KISSKH_MIRRORS=
+      ## 欧乐 API hosts served to the config page (comma-separated http(s) URLs) | none
+      - OLE_HOSTS=
 
       ## The Movie Database (TMDB) Read Only Access Token. Enriches catalogs and
       ## metas with artwork/descriptions; leave empty to skip the TMDB feature

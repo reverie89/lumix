@@ -12,14 +12,25 @@ import {
   expandKisskhCatalogs,
   KISSKH_HIDDEN_CATALOGS,
 } from "../source/kisskh-catalogs.js";
+import { PROVIDER_LABELS, SHORT_NAME } from "../utils/constant.js";
 
-export interface ProviderSettings {
+export interface KisskhSettings {
   mirrors: string[];
   type: string[];
   region: string[];
   status: string[];
   update: string[];
 }
+
+export interface OleSettings {
+  mirrors: string[];
+  type: string[];
+  region: string[];
+  update: string[];
+}
+
+// One entry per provider tab on the config page
+export type ProviderSettings = KisskhSettings | OleSettings;
 
 export interface UserConfig {
   // Per-provider settings (one entry per provider tab on the config page)
@@ -34,11 +45,12 @@ export enum Prefix {
   IMDB = "tt",
   TMDB = "tmdb",
   KISSKH = "kisskh",
+  OLE = "ole",
 }
 
 // "__all__" expands server-side to every option of the tier (see
 // normalizeKisskhTiers) — the same semantics as the config page's All chip.
-const defaultKisskhSettings: ProviderSettings = {
+const defaultKisskhSettings: KisskhSettings = {
   mirrors: [],
   type: ["__all__"],
   region: ["__all__"],
@@ -46,6 +58,8 @@ const defaultKisskhSettings: ProviderSettings = {
   update: ["__all__"],
 };
 
+// Deliberately kisskh-only: the default (unconfigured) manifest and the
+// startup cache-warming stay kisskh-sized; 欧乐 is opt-in via the config page.
 export const defaultConfig: UserConfig = {
   providers: { kisskh: defaultKisskhSettings },
   catalogs: [
@@ -69,7 +83,7 @@ function buildCatalogMap(catalogs: string[] = defaultConfig.catalogs) {
     const manifestCatalog: ManifestCatalog = {
       id: catalogId,
       type: type as ContentType,
-      name: `[${pkg.name}: ${prefix}] ${name}`,
+      name: `[${SHORT_NAME}/${PROVIDER_LABELS[prefix ?? ""] ?? prefix}] ${name}`,
       extra: extra,
     };
     return manifestCatalog;
@@ -90,7 +104,7 @@ const baseManifest: Manifest = {
   // whatever origin the client used (tunnel host, LAN IP, localhost), so
   // there is no single canonical origin to bake in
   logo: "",
-  idPrefixes: [Prefix.IMDB, Prefix.TMDB, Prefix.KISSKH],
+  idPrefixes: [Prefix.IMDB, Prefix.TMDB, Prefix.KISSKH, Prefix.OLE],
   types: ["movie", "series"],
   name: pkg.name,
   description: pkg.description,
@@ -111,9 +125,12 @@ export function buildManifest(config?: UserConfig, origin = "") {
   if (!config && defaultManifest) return withOrigin(defaultManifest);
   config = config || defaultConfig;
   // Buffer-based encoding: btoa throws on non-Latin-1 chars (e.g. a Unicode
-  // key in the config) and would turn the manifest request into a 500
+  // key in the config) and would turn the manifest request into a 500.
+  // base64url: a standard base64 config containing "/" (common once Chinese
+  // tier names are in the config) would split the URL path into extra
+  // segments; decodeConfig's base64 decoder accepts the url-safe alphabet
   const config64 = Buffer.from(JSON.stringify(config), "utf-8").toString(
-    "base64",
+    "base64url",
   );
   const manifest = { ...baseManifest };
   manifest.resources = [...baseManifest.resources];
@@ -124,7 +141,7 @@ export function buildManifest(config?: UserConfig, origin = "") {
     const metaResource: FullManifestResource = {
       name: "meta",
       types: ["movie", "series"],
-      idPrefixes: [Prefix.IMDB, Prefix.TMDB, Prefix.KISSKH],
+      idPrefixes: [Prefix.IMDB, Prefix.TMDB, Prefix.KISSKH, Prefix.OLE],
     };
     manifest.resources.push(metaResource);
     config.catalog.forEach((provider) => {

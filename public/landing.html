@@ -47,25 +47,34 @@
                 <!-- Tab bar: one tab per provider, each provider owns its panel -->
                 <div class="tabs" id="provider-tabs" role="tablist">
                     <button type="button" class="tab active" data-tab="kisskh" role="tab">kisskh</button>
+                    <button type="button" class="tab" data-tab="ole" role="tab">欧乐</button>
                 </div>
 
                 <!-- kisskh panel -->
                 <div class="tab-panel active" id="tab-kisskh" data-provider="kisskh">
+                    <!-- Enabled: an off toggle leaves the provider out of the manifest entirely -->
+                    <fieldset class="config-group provider-enable-group">
+                        <span class="chip-option">
+                            <input type="checkbox" id="kisskh-enabled" class="provider-toggle" checked>
+                            <label class="chip" for="kisskh-enabled">Enabled</label>
+                        </span>
+                        <p class="hint">Turn off to leave kisskh out of the manifest</p>
+                    </fieldset>
                     <!-- Mirrors: an ordered fallback list, first is tried first -->
                     <fieldset class="config-group" id="kisskh-mirrors-group">
                         <legend>Mirrors</legend>
                         <p class="hint">At least one required · tried top to bottom ·
                             failed mirrors are retried after 10 min</p>
-                        <ol class="mirror-order" id="mirror-order"></ol>
-                        <p class="hint" id="mirror-more-label" hidden>More mirrors · tap to add as a fallback</p>
-                        <div class="chip-grid" id="mirror-more"></div>
+                        <ol class="mirror-order" id="kisskh-mirror-order"></ol>
+                        <p class="hint" id="kisskh-mirror-more-label" hidden>More mirrors · tap to add as a fallback</p>
+                        <div class="chip-grid" id="kisskh-mirror-more"></div>
                         <div class="mirror-add">
-                            <input type="text" id="mirror-input" placeholder="kisskh.example.gg"
+                            <input type="text" id="kisskh-mirror-input" placeholder="kisskh.example.gg"
                                 autocomplete="off" inputmode="url" aria-label="Add a custom mirror URL">
-                            <button type="button" class="paste-btn" data-target="mirror-input">Paste</button>
-                            <button type="button" id="mirror-add-btn" class="copy-btn">Add</button>
+                            <button type="button" class="paste-btn" data-target="kisskh-mirror-input">Paste</button>
+                            <button type="button" id="kisskh-mirror-add-btn" class="copy-btn">Add</button>
                         </div>
-                        <p class="hint mirror-error" id="mirror-error" role="alert" hidden></p>
+                        <p class="hint mirror-error" id="kisskh-mirror-error" role="alert" hidden></p>
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="type">
@@ -182,7 +191,7 @@
                     </fieldset>
 
                     <fieldset class="config-group" data-tier="update">
-                        <legend>Update</legend>
+                        <legend>Sort</legend>
                         <p class="hint">At least one required · sort order of the selected catalogs</p>
                         <div class="chip-grid">
                             <span class="chip-option">
@@ -194,12 +203,170 @@
                                 <label class="chip" for="kisskh-update-popular">Popular</label>
                             </span>
                             <span class="chip-option">
-                                <input type="checkbox" id="kisskh-update-latest" value="Latest">
-                                <label class="chip" for="kisskh-update-latest">Latest</label>
+                                <input type="checkbox" id="kisskh-update-last-update" value="Last Update">
+                                <label class="chip" for="kisskh-update-last-update">Last Update</label>
                             </span>
                             <span class="chip-option">
-                                <input type="checkbox" id="kisskh-update-newest" value="Newest">
-                                <label class="chip" for="kisskh-update-newest">Newest</label>
+                                <input type="checkbox" id="kisskh-update-release-date" value="Release Date">
+                                <label class="chip" for="kisskh-update-release-date">Release Date</label>
+                            </span>
+                        </div>
+                    </fieldset>
+                </div>
+
+                <!-- ole (欧乐) panel -->
+                <div class="tab-panel" id="tab-ole" data-provider="ole">
+                    <fieldset class="config-group provider-enable-group">
+                        <span class="chip-option">
+                            <input type="checkbox" id="ole-enabled" class="provider-toggle">
+                            <label class="chip" for="ole-enabled">Enabled</label>
+                        </span>
+                        <p class="hint">Turn off to leave 欧乐 out of the manifest</p>
+                    </fieldset>
+                    <fieldset class="config-group" id="ole-mirrors-group">
+                        <legend>API hosts</legend>
+                        <p class="hint">At least one required · tried top to bottom ·
+                            failed hosts are retried after 10 min</p>
+                        <ol class="mirror-order" id="ole-mirror-order"></ol>
+                        <p class="hint" id="ole-mirror-more-label" hidden>More hosts · tap to add as a fallback</p>
+                        <div class="chip-grid" id="ole-mirror-more"></div>
+                        <div class="mirror-add">
+                                autocomplete="off" inputmode="url" aria-label="Add a custom API host URL">
+                            <button type="button" class="paste-btn" data-target="ole-mirror-input">Paste</button>
+                            <button type="button" id="ole-mirror-add-btn" class="copy-btn">Add</button>
+                        </div>
+                        <p class="hint mirror-error" id="ole-mirror-error" role="alert" hidden></p>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="type">
+                        <legend>Type</legend>
+                        <p class="hint">At least one required · "All" selects or clears the tier</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-type-all" value="__all__">
+                                <label class="chip" for="ole-type-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-type-tvseries" value="TVSeries">
+                                <label class="chip" for="ole-type-tvseries">TV Series</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-type-movies" value="Movies">
+                                <label class="chip" for="ole-type-movies">Movies</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-type-variety" value="Variety">
+                                <label class="chip" for="ole-type-variety">Variety</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-type-anime" value="Anime">
+                                <label class="chip" for="ole-type-anime">Anime</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-type-shortdrama" value="ShortDrama">
+                                <label class="chip" for="ole-type-shortdrama">Short Drama</label>
+                            </span>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="region">
+                        <legend>Region</legend>
+                        <p class="hint">At least one required · each region adds a series and a movies catalog</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-all" value="__all__">
+                                <label class="chip" for="ole-region-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-chinese" value="Chinese">
+                                <label class="chip" for="ole-region-chinese">Chinese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-hongkong" value="Hongkong">
+                                <label class="chip" for="ole-region-hongkong">Hongkong</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-taiwanese" value="Taiwanese">
+                                <label class="chip" for="ole-region-taiwanese">Taiwanese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-japanese" value="Japanese">
+                                <label class="chip" for="ole-region-japanese">Japanese</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-korean" value="Korean">
+                                <label class="chip" for="ole-region-korean">Korean</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-us" value="US">
+                                <label class="chip" for="ole-region-us">United States</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-uk" value="UK">
+                                <label class="chip" for="ole-region-uk">United Kingdom</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-thai" value="Thai">
+                                <label class="chip" for="ole-region-thai">Thai</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-french" value="French">
+                                <label class="chip" for="ole-region-french">French</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-german" value="German">
+                                <label class="chip" for="ole-region-german">German</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-italian" value="Italian">
+                                <label class="chip" for="ole-region-italian">Italian</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-spanish" value="Spanish">
+                                <label class="chip" for="ole-region-spanish">Spanish</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-canadian" value="Canadian">
+                                <label class="chip" for="ole-region-canadian">Canadian</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-russian" value="Russian">
+                                <label class="chip" for="ole-region-russian">Russian</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-dutch" value="Dutch">
+                                <label class="chip" for="ole-region-dutch">Dutch</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-region-australian" value="Australian">
+                                <label class="chip" for="ole-region-australian">Australian</label>
+                            </span>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="update">
+                        <legend>Sort</legend>
+                        <p class="hint">At least one required · sort order of the selected catalogs</p>
+                        <div class="chip-grid">
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-update-all" value="__all__">
+                                <label class="chip" for="ole-update-all">All</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-update-popular" value="Popular">
+                                <label class="chip" for="ole-update-popular">Popular</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-update-last-update" value="Last Update">
+                                <label class="chip" for="ole-update-last-update">Last Update</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-update-score" value="Score">
+                                <label class="chip" for="ole-update-score">Score</label>
+                            </span>
+                            <span class="chip-option">
+                                <input type="checkbox" id="ole-update-release-date" value="Release Date">
+                                <label class="chip" for="ole-update-release-date">Release Date</label>
                             </span>
                         </div>
                     </fieldset>
@@ -234,6 +401,7 @@
 
     <span style="display: none;" id="defaultConfig">{{DEFAULT_CONFIG}}</span>
     <script type="application/json" id="defaultMirrors">{{DEFAULT_MIRRORS}}</script>
+    <script type="application/json" id="oleDefaultMirrors">{{OLE_DEFAULT_MIRRORS}}</script>
     <script src="/js/landing.js?v={{JS_HASH}}"></script>
 </body>
 

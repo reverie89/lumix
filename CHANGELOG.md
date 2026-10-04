@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-04
+
+### Added
+
+- 欧乐 (ole) provider — catalog, meta and stream endpoints with kisskh-aligned category vocabulary, opt-in from the config page's provider tab; upstream subtitles are burned in, so its subtitle endpoint serves none
+
 ## [0.1.0] - 2026-10-04
 
 Initial release of **lumix** — a Stremio addon that streams dramas, series and movies from kisskh, with optional TMDB enrichment.
@@ -25,4 +31,5 @@ Initial release of **lumix** — a Stremio addon that streams dramas, series and
 - Docker deployment — Dockerfile, docker-compose.yaml and a CI workflow publishing the image to ghcr.io; the server always listens on port 55913
 
 
+[0.2.0]: https://github.com/reverie89/lumix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/reverie89/lumix/releases/tag/v0.1.0

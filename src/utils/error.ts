@@ -55,6 +55,16 @@ export class KisskhTokenError extends Error {
   }
 }
 
+// OLE
+
+export class OleDetailError extends Error {
+  constructor(message: string) {
+    const name = ErrorName.OLE_DETAIL;
+    super(`${name} | ${message}`);
+    this.name = name;
+  }
+}
+
 enum ErrorName {
   ERROR = "Error",
   RATE_LIMIT = "[RATELIMIT]",
@@ -71,6 +81,8 @@ enum ErrorName {
   KISSKH_DETAIL = "[KISSKH] Detail Error",
   KISSKH_EPISODE = "[KISSKH] Episode Error",
   KISSKH_TOKEN = "[KISSKH] Token Error",
+  // OLE
+  OLE_DETAIL = "[OLE] Detail Error",
 }
 
 export function handleError(
@@ -85,6 +97,7 @@ export function handleError(
     case error instanceof TmdbError:
     case error instanceof KisskhDetailError:
     case error instanceof KisskhEpisodeError:
+    case error instanceof OleDetailError:
       logger.warn(`${message} | ${error.message}`);
       return error;
     case error instanceof KisskhTokenError:

@@ -6,7 +6,10 @@ import path from "path";
 import pkg from "../../../package.json" with { type: "json" };
 import { defaultConfig } from "../../lib/manifest.js";
 import { ENV } from "../../utils/env.js";
-import { KISSKH_DEFAULT_MIRRORS } from "../../utils/constant.js";
+import {
+  KISSKH_DEFAULT_MIRRORS,
+  OLE_DEFAULT_MIRRORS,
+} from "../../utils/constant.js";
 
 const publicRouter = new Hono();
 const rootDir = process.cwd();
@@ -39,6 +42,10 @@ const getLandingPage = () => {
     .replace("{{VERSION}}", pkg.version)
     .replace("{{DEFAULT_CONFIG}}", JSON.stringify(defaultConfig))
     .replace("{{DEFAULT_MIRRORS}}", JSON.stringify(KISSKH_DEFAULT_MIRRORS))
+    .replace(
+      "{{OLE_DEFAULT_MIRRORS}}",
+      JSON.stringify(OLE_DEFAULT_MIRRORS),
+    )
     // The tagline only credits TMDB on deployments that actually enrich with it
     .replace(
       "{{TMDB_TAGLINE}}",

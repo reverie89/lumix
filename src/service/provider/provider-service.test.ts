@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ContentDetail } from "./meta.js";
-import { tmdb } from "./tmdb.js";
-import { resolveKisskhPoster } from "./kisskh.js";
+import ProviderService from "./provider-service.js";
+import { Provider } from "../../source/provider.js";
+import { ContentDetail } from "../../source/meta.js";
+import { tmdb } from "../../source/tmdb.js";
 
 // isTmdbEnabled reads ENV at call time, but ENV parses once at import — the
 // hoisted key makes the enabled state real for this file's import order
@@ -11,13 +12,15 @@ const { tmdbEnabled } = vi.hoisted(() => {
 });
 const dbGet = vi.fn();
 
-vi.mock("./tmdb.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./tmdb.js")>();
+vi.mock("../../source/tmdb.js", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../../source/tmdb.js")
+  >();
   return { ...actual, isTmdbEnabled: () => tmdbEnabled() };
 });
 
-vi.mock("../db/queries.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../db/queries.js")>();
+vi.mock("../../db/queries.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../db/queries.js")>();
   return { ...actual, getContentByProviderId: (id: string) => dbGet(id) };
 });
 
@@ -29,11 +32,12 @@ beforeEach(() => {
   tmdbEnabled.mockReturnValue(true);
 });
 
-describe("resolveKisskhPoster", () => {
-  it("serves stored art for a linked kisskh id without searching TMDB", async () => {
+describe("resolveProviderPoster", () => {
+  it("serves stored art for a linked provider id without searching TMDB", async () => {
     dbGet.mockResolvedValue({ poster: "https://img/tmdb.jpg" });
     searchDetail.mockResolvedValue(null);
-    const result = await resolveKisskhPoster(
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
       11923,
       "Known Title",
       "https://img/kisskh.jpg",
@@ -51,19 +55,22 @@ describe("resolveKisskhPoster", () => {
     dbGet.mockResolvedValue(undefined);
     const detail = { thumbnail: "https://img/tmdb2.jpg" } as ContentDetail;
     searchDetail.mockResolvedValue(detail);
-    const result = await resolveKisskhPoster(
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.OLE,
       42,
       "New Title",
-      "https://img/kisskh.jpg",
+      "https://img/ole.jpg",
       "movie",
     );
     expect(result).toEqual({ poster: "https://img/tmdb2.jpg", detail });
     expect(searchDetail).toHaveBeenCalledWith("New Title", "movie");
+    expect(dbGet).toHaveBeenCalledWith("ole:42");
   });
 
-  it("falls back to the kisskh thumbnail when the linked row has no poster", async () => {
+  it("falls back to the provider image when the linked row has no poster", async () => {
     dbGet.mockResolvedValue({ poster: null });
-    const result = await resolveKisskhPoster(
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
       7,
       "No Art",
       "https://img/kisskh.jpg",
@@ -78,7 +85,8 @@ describe("resolveKisskhPoster", () => {
 
   it("skips TMDB entirely when no key is configured", async () => {
     tmdbEnabled.mockReturnValue(false);
-    const result = await resolveKisskhPoster(
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
       9,
       "Any Title",
       "https://img/kisskh.jpg",

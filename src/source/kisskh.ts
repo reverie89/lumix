@@ -7,12 +7,10 @@ import {
   Stream,
   Subtitle,
 } from "@stremio-addon/sdk";
-import { AxiosRequestConfig } from "axios";
 import * as cheerio from "cheerio";
 import vm from "node:vm";
 import { uuidv7 } from "uuidv7";
 import {
-  getContentByProviderId,
   getContentByTmdb,
   getProviderContentById,
   upsertContent,
@@ -22,6 +20,7 @@ import {
 } from "../db/queries.js";
 import { ESubtitleInsert } from "../db/schema/subtitle.js";
 import { Prefix, UserConfig } from "../lib/manifest.js";
+import { MirrorFailover } from "../service/mirror-failover.js";
 import ProviderService from "../service/provider/provider-service.js";
 import StreamService from "../service/resource/stream-service.js";
 import SubtitleService from "../service/resource/subtitle-service.js";
@@ -29,13 +28,14 @@ import { axiosGet } from "../utils/axios.js";
 import { cache, TTL_MS } from "../utils/cache.js";
 import {
   KISSKH_DEFAULT_MIRRORS,
-  KISSKH_FAIL_TTL_MS,
+  MIRROR_FAIL_TTL_MS,
   RATE_LIMIT_DESCRIPTION,
 } from "../utils/constant.js";
 import { handleError, KisskhDetailError, KisskhEpisodeError, KisskhTokenError, RateLimitError } from "../utils/error.js";
 import { cleanUrl, formatStreamFilename, formatStreamTitle, parseOrigin } from "../utils/format.js";
 import { matchTitle } from "../utils/fuse.js";
 import { CountryCode, iso639FromCountryCode } from "../utils/language.js";
+import { Logger } from "../utils/logger.js";
 import { getKisskhQuery } from "./kisskh-catalogs.js";
 import { getSubtitleVtt } from "./kisskh-subtitle.js";
 import { ContentDetail } from "./meta.js";
@@ -48,6 +48,17 @@ interface SearchResult {
   episodesCount: number;
   thumbnail: string;
 }
+
+// Shared mirror memory: every kisskh request feeds the same origin metrics.
+// The last-resort fallback degrades to "" when no mirror is deployed
+// (KISSKH_MIRRORS unset) — request building fails and the warning says why.
+if (KISSKH_DEFAULT_MIRRORS.length === 0) {
+  new Logger("KISSKH").warn("No mirrors configured | set KISSKH_MIRRORS in .env");
+}
+const kisskhFailover = new MirrorFailover(
+  MIRROR_FAIL_TTL_MS,
+  KISSKH_DEFAULT_MIRRORS[0] ?? "",
+);
 
 // Compiled token bundles kept in memory, one per mirror origin
 const MAX_TOKEN_SCRIPTS = 16;
@@ -87,35 +98,11 @@ interface SubResponse {
   default: boolean;
 }
 
-/**
- * Poster for a catalog item, DB-first: a kisskh id already linked to a
- * content row resolves its stored TMDB art with no TMDB call, so cold
- * catalogs after a restart never re-search known titles. Unmapped titles
- * search TMDB once (callers persist the new mapping); a miss or a disabled
- * TMDB key falls back to kisskh's own thumbnail.
- */
-export async function resolveKisskhPoster(
-  kisskhId: number | string,
-  title: string,
-  fallback: string,
-  type: ContentType,
-): Promise<{ poster: string; detail: ContentDetail | null }> {
-  const linked = await getContentByProviderId(
-    `${Prefix.KISSKH}:${kisskhId}`,
-  );
-  if (linked) {
-    return { poster: linked.poster || fallback, detail: null };
-  }
-  if (!isTmdbEnabled()) {
-    return { poster: fallback, detail: null };
-  }
-  const detail = await tmdb.searchDetail(title, type);
-  return { poster: detail?.thumbnail || fallback, detail };
-}
-
 export class KisskhScraper extends BaseProvider {
+  readonly defaultMirrors = KISSKH_DEFAULT_MIRRORS;
+  readonly failover = kisskhFailover;
   getBaseUrl(config?: UserConfig) {
-    return getKisskhBaseUrl(getMirrors(config));
+    return kisskhFailover.select(this.mirrors(config));
   }
   readonly supportedPrefix: Prefix[] = [
     Prefix.IMDB,
@@ -181,7 +168,8 @@ export class KisskhScraper extends BaseProvider {
       .slice(0, this.pageSize);
     const metas = await Promise.all(
       filterResults.map(async (kissItem) => {
-        const { poster } = await resolveKisskhPoster(
+        const { poster } = await ProviderService.resolveProviderPoster(
+          this.name,
           kissItem.id,
           kissItem.title,
           kissItem.thumbnail,
@@ -224,7 +212,7 @@ export class KisskhScraper extends BaseProvider {
       `?page=${page}&type=${query.type}&sub=0&country=${query.country}&status=${query.status}&order=${query.order}`;
 
     this.logger.log(`GET catalog | ${url}`);
-    const catalogData = await this.getWithMetrics<KisskhCatalogData>(url);
+    const catalogData = await kisskhFailover.get<KisskhCatalogData>(url);
     const flatDatas = Array.isArray(catalogData?.data) ? catalogData.data : [];
 
     // Map to final Meta format. Posters resolve DB-first (see resolvePoster):
@@ -233,12 +221,14 @@ export class KisskhScraper extends BaseProvider {
     const metas = await Promise.all(
       flatDatas.map(async (kissItem) => {
         const id = `${Prefix.KISSKH}:${kissItem.id}`;
-        const { poster, detail: tmdbDetail } = await resolveKisskhPoster(
-          kissItem.id,
-          kissItem.title,
-          kissItem.thumbnail,
-          type,
-        );
+        const { poster, detail: tmdbDetail } =
+          await ProviderService.resolveProviderPoster(
+            this.name,
+            kissItem.id,
+            kissItem.title,
+            kissItem.thumbnail,
+            type,
+          );
 
         // Persist a fresh TMDB match (skipped for DB-resolved items, which
         // already have their rows)
@@ -629,28 +619,6 @@ export class KisskhScraper extends BaseProvider {
     }
   }
 
-  /**
-   * axiosGet wrapped with per-mirror success/fail accounting so mirror
-   * failover learns from every request, not only stream fetches.
-   */
-  private async getWithMetrics<T>(
-    url: string,
-    axiosConfig?: AxiosRequestConfig,
-  ): Promise<T | null> {
-    try {
-      const data = await axiosGet<T>(url, axiosConfig);
-      if (data === null || data === undefined) {
-        markKisskhUrlFail(url);
-      } else {
-        markKisskhUrlSuccess(url);
-      }
-      return data;
-    } catch (error) {
-      markKisskhUrlFail(url);
-      throw error;
-    }
-  }
-
   private async _getShows(
     title: string,
     year?: number,
@@ -660,7 +628,7 @@ export class KisskhScraper extends BaseProvider {
   ): Promise<SearchResult[]> {
     const url = `${this.getSearchUrl(config)}${encodeURIComponent(title)}&type=0`;
     this.logger.log(`GET search | ${url}`);
-    const searchData = await this.getWithMetrics<SearchResult[]>(url);
+    const searchData = await kisskhFailover.get<SearchResult[]>(url);
     if (!searchData || !Array.isArray(searchData)) {
       return [];
     }
@@ -681,7 +649,7 @@ export class KisskhScraper extends BaseProvider {
     }
     const url = `${this.getDetailUrl(config)}/${kisskhId}`;
     this.logger.log(`GET detail | ${url}`);
-    const episodesData = await this.getWithMetrics<KisskhDetail>(url, {
+    const episodesData = await kisskhFailover.get<KisskhDetail>(url, {
       headers: this.headers,
     });
     if (episodesData) {
@@ -732,11 +700,11 @@ export class KisskhScraper extends BaseProvider {
         return null;
       }
       this.logger.log(`Stream Url | ${stream.Video}`);
-      markKisskhUrlSuccess(url);
+      kisskhFailover.markSuccess(url);
       return stream;
     } catch (error) {
       if (error instanceof RateLimitError) {
-        markKisskhUrlFail(url);
+        kisskhFailover.markFail(url);
         return { Video: RATE_LIMIT_DESCRIPTION };
       }
       handleError(error, this.logger, `Fail to get stream`);
@@ -753,7 +721,7 @@ export class KisskhScraper extends BaseProvider {
     const token = await this._getToken(episodeId, this.subGuid, config);
     const subtitleUrl = this.getSubUrl(config).replace("{id}", episodeId) + token;
     this.logger.log(`GET subtitles | ${subtitleUrl}`);
-    const subtitleDatas = await this.getWithMetrics<SubResponse[]>(subtitleUrl);
+    const subtitleDatas = await kisskhFailover.get<SubResponse[]>(subtitleUrl);
     if (!subtitleDatas || !Array.isArray(subtitleDatas)) return [];
     const listOrigin = parseOrigin(subtitleUrl);
     const subtitles: Subtitle[] = [];
@@ -800,86 +768,6 @@ export class KisskhScraper extends BaseProvider {
     }
     return url;
   }
-}
-
-interface UrlMetrics {
-  success: number;
-  fail: number;
-  lastFail: number;
-}
-
-const kisskhMetrics = new Map<string, UrlMetrics>();
-
-/**
- * Mirror candidates for a request: the user's picked mirrors when set,
- * otherwise the built-in defaults.
- */
-function getMirrors(config?: UserConfig): string[] {
-  const mirrors = config?.providers?.kisskh?.mirrors;
-  return mirrors && mirrors.length > 0 ? mirrors : KISSKH_DEFAULT_MIRRORS;
-}
-
-/**
- * Mirror picks follow the user's config order: the first mirror without a
- * recent failure serves. When every mirror failed within the TTL window,
- * the best success/fail ratio serves so traffic lands somewhere healthy.
- */
-function selectKisskhUrl(urls: string[]): string {
-  const now = Date.now();
-  const isFailed = (url: string) => {
-    const metrics = kisskhMetrics.get(url);
-    return (
-      !!metrics &&
-      metrics.fail > 0 &&
-      now - metrics.lastFail < KISSKH_FAIL_TTL_MS
-    );
-  };
-  const healthy = urls.find((url) => !isFailed(url));
-  if (healthy) {
-    return healthy;
-  }
-  const sorted = urls.map((url) => ({
-    url,
-    metrics: kisskhMetrics.get(url),
-  })).sort((a, b) => {
-    const aScore =
-      ((a.metrics?.success ?? 0) + 1) / ((a.metrics?.fail ?? 0) + 1);
-    const bScore =
-      ((b.metrics?.success ?? 0) + 1) / ((b.metrics?.fail ?? 0) + 1);
-    return bScore - aScore;
-  });
-  return sorted[0]?.url || KISSKH_DEFAULT_MIRRORS[0]!;
-}
-
-export function getKisskhMetrics(): Map<string, UrlMetrics> {
-  return kisskhMetrics;
-}
-
-export function getKisskhBaseUrl(urls: string[] = KISSKH_DEFAULT_MIRRORS): string {
-  return selectKisskhUrl(urls);
-}
-
-export function markKisskhUrlSuccess(url: string): void {
-  const host = parseOrigin(url);
-  const metrics = kisskhMetrics.get(host) ?? {
-    success: 0,
-    fail: 0,
-    lastFail: 0,
-  };
-  metrics.success++;
-  kisskhMetrics.set(host, metrics);
-}
-
-export function markKisskhUrlFail(url: string): void {
-  const host = parseOrigin(url);
-  const metrics = kisskhMetrics.get(host) ?? {
-    success: 0,
-    fail: 0,
-    lastFail: 0,
-  };
-  metrics.fail++;
-  metrics.lastFail = Date.now();
-  kisskhMetrics.set(host, metrics);
 }
 
 // Mirrors may live on any user-supplied host, and subtitle files resolve

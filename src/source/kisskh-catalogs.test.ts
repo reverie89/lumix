@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   expandKisskhCatalogs,
   getKisskhQuery,
-  isMirrorUrl,
   isSubtitleSourceHost,
   normalizeKisskhTiers,
 } from "./kisskh-catalogs.js";
@@ -49,12 +48,12 @@ describe("expandKisskhCatalogs", () => {
       type: [],
       region: [],
       status: ["Ongoing"],
-      update: ["Newest"],
+      update: ["Release Date"],
     });
     expect(ids.sort()).toEqual([
-      "kisskh.movie.Newest",
-      "kisskh.series.Newest",
+      "kisskh.movie.Release Date",
       "kisskh.series.Ongoing",
+      "kisskh.series.Release Date",
     ]);
   });
 
@@ -116,7 +115,8 @@ describe("getKisskhQuery", () => {
       status: "2",
     });
     expect(getKisskhQuery("Popular", "movie")).toMatchObject({ order: "1" });
-    expect(getKisskhQuery("Newest", "movie")).toMatchObject({ order: "3" });
+    expect(getKisskhQuery("Release Date", "movie")).toMatchObject({ order: "3" });
+    expect(getKisskhQuery("Last Update", "series")).toMatchObject({ order: "2" });
   });
 
   it("returns null for unknown names", () => {
@@ -131,13 +131,13 @@ describe("normalizeKisskhTiers", () => {
       type: ["TVSeries", "TVSeries", "Bogus"],
       region: ["Korean", "US"],
       status: ["Ongoing"],
-      update: ["Latest"],
+      update: ["Last Update"],
     });
     expect(tiers).toEqual({
       type: ["TVSeries"],
       region: ["Korean", "US"],
       status: ["Ongoing"],
-      update: ["Latest"],
+      update: ["Last Update"],
     });
   });
 
@@ -167,18 +167,6 @@ describe("normalizeKisskhTiers", () => {
     ]);
     expect(tiers.status).toEqual([]);
     expect(tiers.update).toEqual([]);
-  });
-});
-
-describe("isMirrorUrl", () => {
-  it("accepts any http(s) URL regardless of hostname", () => {
-    expect(isMirrorUrl("http://mirror.example")).toBe(true);
-    // Hostnames no longer matter: a mirror is whatever the user inputs
-    expect(isMirrorUrl("https://kisskh.example.evil.com")).toBe(true);
-  });
-
-  it("rejects non-http protocols and garbage", () => {
-    expect(isMirrorUrl("not a url")).toBe(false);
   });
 });
 

@@ -17,6 +17,7 @@ export default defineConfig({
       // constants, so tests stay deterministic regardless of the real .env
       // a developer runs with (dotenv loads it above)
       KISSKH_MIRRORS: "https://kisskh.test",
+      OLE_HOSTS: "https://ole.test",
     },
     projects: [
       {

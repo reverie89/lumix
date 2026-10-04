@@ -16,4 +16,5 @@ export interface ContentId {
   imdbId?: string;
   tmdbId?: number;
   kisskhId?: string;
+  oleId?: string;
 }

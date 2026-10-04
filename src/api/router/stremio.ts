@@ -25,14 +25,19 @@ import { getSubtitleVtt } from "../../source/kisskh-subtitle.js";
 import {
   expandKisskhCatalogs,
   getKisskhQuery,
-  isMirrorUrl,
   isSubtitleSourceHost,
   KISSKH_HIDDEN_CATALOGS,
   normalizeKisskhTiers,
 } from "../../source/kisskh-catalogs.js";
 import { isSeenSubtitleOrigin } from "../../source/kisskh.js";
+import {
+  expandOleCatalogs,
+  normalizeOleTiers,
+  OLE_HIDDEN_CATALOGS,
+} from "../../source/ole-catalogs.js";
 import { Provider } from "../../source/provider.js";
-import { DISPLAY_NAME } from "../../utils/constant.js";
+import { isMirrorUrl } from "../../utils/format.js";
+import { SHORT_NAME } from "../../utils/constant.js";
 import { ENV } from "../../utils/env.js";
 import { Logger } from "../../utils/logger.js";
 import { extractHeaderInfo, getRequestOrigin } from "../../utils/request.js";
@@ -54,7 +59,7 @@ function getRetryAfterText(remaining: number) {
     return `${minutes} minutes`;
   }
 }
-const getName = () => `⏱️${DISPLAY_NAME}\nRate Limit`;
+const getName = () => `⏱️${SHORT_NAME}\nRate Limit`;
 const getLimiter = (
   resource: ShortManifestResource,
   windowMs: number = 30 * 60 * 1000,
@@ -230,8 +235,10 @@ const asStringArray = (value: any): string[] =>
 
 /**
  * Normalize a decoded config: validate mirrors and tier picks, expand catalog
- * ids and derive catalog/stream providers. Legacy flat configs (older
- * manifest links) fall back to their kisskh catalog ids.
+ * ids and derive catalog/stream providers. Every provider block present in
+ * the raw config contributes — a config may enable kisskh and 欧乐 together.
+ * Legacy flat configs (older manifest links) fall back to their kisskh
+ * catalog ids.
  */
 function normalizeConfig(raw: any): UserConfig {
   const config: UserConfig = {
@@ -251,13 +258,36 @@ function normalizeConfig(raw: any): UserConfig {
     });
     const mirrors = asStringArray(rawKisskh.mirrors).filter(isMirrorUrl);
     config.providers.kisskh = { ...tiers, mirrors };
-    config.catalogs = [
+    config.catalogs.push(
       ...expandKisskhCatalogs(tiers),
       ...KISSKH_HIDDEN_CATALOGS,
-    ];
-    config.catalog = [Provider.KISSKH];
-    config.stream = [Provider.KISSKH];
-  } else if (Array.isArray(raw?.catalogs)) {
+    );
+    config.catalog.push(Provider.KISSKH);
+    config.stream.push(Provider.KISSKH);
+  }
+
+  const rawOle = raw?.providers?.ole;
+  if (rawOle && typeof rawOle === "object") {
+    const tiers = normalizeOleTiers({
+      type: asStringArray(rawOle.type),
+      region: asStringArray(rawOle.region),
+      update: asStringArray(rawOle.update),
+    });
+    const mirrors = asStringArray(rawOle.mirrors).filter(isMirrorUrl);
+    config.providers.ole = { ...tiers, mirrors };
+    config.catalogs.push(
+      ...expandOleCatalogs(tiers),
+      ...OLE_HIDDEN_CATALOGS,
+    );
+    config.catalog.push(Provider.OLE);
+    config.stream.push(Provider.OLE);
+  }
+
+  if (config.catalog.length > 0) {
+    return config;
+  }
+
+  if (Array.isArray(raw?.catalogs)) {
     // Legacy config format: keep known kisskh catalogs, drop other providers.
     // Names are reflected into the manifest, so only the known taxonomy passes.
     config.catalogs = raw.catalogs.filter((id: string) => {
@@ -281,12 +311,12 @@ function normalizeConfig(raw: any): UserConfig {
     )
       ? [Provider.KISSKH]
       : [];
-  } else {
-    // Unrecognized shape: serve the default catalogs instead of an addon
-    // with no rows
-    return { ...defaultConfig };
+    return config;
   }
-  return config;
+
+  // Unrecognized shape: serve the default catalogs instead of an addon
+  // with no rows
+  return { ...defaultConfig };
 }
 
 export const decodeConfig = (configBase64: string): UserConfig => {
@@ -294,8 +324,14 @@ export const decodeConfig = (configBase64: string): UserConfig => {
     const decoded = Buffer.from(configBase64, "base64").toString("utf-8");
     const raw = JSON.parse(decoded);
     const config = normalizeConfig(raw);
+    const mirrorSummary = Object.entries(config.providers)
+      .map(
+        ([name, settings]) =>
+          `${name}: ${settings.mirrors.join(",") || "default"}`,
+      )
+      .join(" | ");
     logger.debug(
-      `Config | catalogs: ${config.catalogs.length}, mirrors: ${config.providers.kisskh?.mirrors.join(",") || "default"}`,
+      `Config | catalogs: ${config.catalogs.length}, mirrors: ${mirrorSummary || "default"}`,
     );
     return config;
   } catch (error) {
