@@ -36,6 +36,7 @@ export const KISSKH_DEFAULT_MIRRORS = ENV.KISSKH_MIRRORS.filter(isMirrorUrl);
 export const MIRROR_FAIL_TTL_MS = 10 * 60 * 1000;
 
 // ole (欧乐) serves everything through one JSON API host (OLE_HOSTS
+// in .env) — the web mirrors never see addon traffic.
 // Kept configurable like the kisskh mirrors so a rotated host can be added
 // from the config page.
 export const OLE_DEFAULT_MIRRORS = ENV.OLE_HOSTS.filter(isMirrorUrl);

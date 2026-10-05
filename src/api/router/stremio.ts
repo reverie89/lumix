@@ -305,6 +305,18 @@ function addProviderBlock(
   config.stream.push(provider);
 }
 
+// First occurrence wins; the key ignores case and trailing slashes — the
+// config page applies the same rule to user inputs (landing.js mirrorKey)
+function dedupeMirrors(mirrors: string[]): string[] {
+  const seen = new Set<string>();
+  return mirrors.filter((mirror) => {
+    const key = mirror.replace(/\/+$/, "").toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * Normalize a decoded config: validate mirrors and tier picks, expand catalog
  * ids and derive catalog/stream providers. Providers contribute in the
@@ -327,7 +339,9 @@ function normalizeConfig(raw: any): UserConfig {
   for (const provider of normalizeProviderOrder(asStringArray(raw?.order))) {
     const rawSettings = raw?.providers?.[provider];
     if (!rawSettings || typeof rawSettings !== "object") continue;
-    const mirrors = asStringArray(rawSettings.mirrors).filter(isMirrorUrl);
+    const mirrors = dedupeMirrors(
+      asStringArray(rawSettings.mirrors).filter(isMirrorUrl),
+    );
     if (provider === Provider.KISSKH) {
       const tiers = normalizeKisskhTiers({
         order: asStringArray(rawSettings.order),

@@ -487,6 +487,11 @@ function normalizeMirrorInput(value) {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
+// Duplicate picks collapse: the key ignores case and trailing slashes and
+// the first occurrence wins. The server's normalizeConfig mirrors this rule,
+// so a hand-crafted config cannot sneak duplicates past the page either.
+const mirrorKey = (url) => normalizeMirrorInput(url).toLowerCase();
+
 // Dotted hostname labels or an IP literal. Browsers may parse URLs whose
 // host contains spaces instead of throwing (Node does throw), so the shape
 // is checked explicitly.
@@ -534,8 +539,9 @@ function createMirrorWidget(provider) {
     list.render();
     // Defaults not picked live in the "More mirrors" grid; custom mirrors
     // only exist while they are part of the order (re-addable via the input)
+    const pickedKeys = new Set(list.values.map(mirrorKey));
     const more = DEFAULT_MIRRORS[provider].filter(
-      (url) => !list.values.includes(url),
+      (url) => !pickedKeys.has(mirrorKey(url)),
     );
     els.moreLabel.hidden = more.length === 0;
     els.more.hidden = more.length === 0;
@@ -562,7 +568,7 @@ function createMirrorWidget(provider) {
       mirrorError(t("invalidMirror"));
       return;
     }
-    if (list.values.includes(value)) {
+    if (list.values.some((existing) => mirrorKey(existing) === mirrorKey(value))) {
       mirrorError(t("mirrorExists"));
       return;
     }
@@ -599,7 +605,17 @@ function createMirrorWidget(provider) {
       return list.values;
     },
     setMirrors(mirrors) {
-      list.setValues(mirrors);
+      // Seeds, restored configs and hand-crafted links all arrive here, so
+      // duplicates collapse on the way in (first occurrence keeps its place)
+      const seen = new Set();
+      list.setValues(
+        mirrors.filter((mirror) => {
+          const key = mirrorKey(mirror);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }),
+      );
     },
   };
 }

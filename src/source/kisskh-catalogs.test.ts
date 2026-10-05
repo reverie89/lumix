@@ -202,6 +202,7 @@ describe("normalizeKisskhTiers", () => {
 
 describe("isSubtitleSourceHost", () => {
   it("accepts kisskh mirrors and the kisskh CDN", () => {
+    expect(isSubtitleSourceHost("kisskh.test")).toBe(true);
     expect(isSubtitleSourceHost("sub.cdnvideo11.shop")).toBe(true);
     expect(isSubtitleSourceHost("hls08.cdnvideo11.shop")).toBe(true);
     expect(isSubtitleSourceHost("cdnvideo11.shop")).toBe(true);

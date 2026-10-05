@@ -83,14 +83,20 @@ files (subs are hardcoded upstream) — its `getSubtitles` returns `[]`.
 ## Mirrors
 
 kisskh has no single canonical domain; ole's picks are its API hosts
-(not web mirrors); a mirror is any http(s) URL the user inputs. The
-defaults live in `utils/constant.ts KISSKH_DEFAULT_MIRRORS` /
-`OLE_DEFAULT_MIRRORS`. Requests walk the picked mirrors in the user's
-chosen order, skipping mirrors with a failure in the last
-`MIRROR_FAIL_TTL_MS` and otherwise falling back to the best success/fail
-ratio (`MirrorFailover` in `src/service/mirror-failover.ts`, one instance
-per provider). The page-side mirror UX is in
-[CONFIG_PAGE.md](CONFIG_PAGE.md).
+(not web mirrors); a mirror is any http(s) URL the user inputs — the page
+auto-prefixes `https://` when no scheme is typed. The mirror defaults are a
+deployment setting: `KISSKH_MIRRORS` / `OLE_HOSTS` in env (ole's are
+its API hosts, not the web mirrors) — `utils/constant.ts
+KISSKH_DEFAULT_MIRRORS` / `OLE_DEFAULT_MIRRORS` filter them through
+`isMirrorUrl`; an empty env means no default mirrors. The server injects
+them into the config page (`public.ts` templates `{{DEFAULT_MIRRORS}}` /
+`{{OLE_DEFAULT_MIRRORS}}`), and both the page and `normalizeConfig`
+deduplicate picks (case- and trailing-slash-insensitive, first occurrence
+wins). Requests walk the picked mirrors in the user's chosen order,
+skipping mirrors with a failure in the last `MIRROR_FAIL_TTL_MS` and
+otherwise falling back to the best success/fail ratio (`MirrorFailover` in
+`src/service/mirror-failover.ts`, one instance per provider). The page-side
+mirror UX is in [CONFIG_PAGE.md](CONFIG_PAGE.md).
 
 ## Provider contract and vocabulary
 

@@ -45,12 +45,17 @@ describe("formatStreamFilename", () => {
 
 describe("isMirrorUrl", () => {
   it("accepts any http(s) URL regardless of hostname", () => {
+    expect(isMirrorUrl("https://kisskh.test")).toBe(true);
+    expect(isMirrorUrl("https://kisskh.test/path")).toBe(true);
     expect(isMirrorUrl("http://mirror.example")).toBe(true);
+    expect(isMirrorUrl("https://api.ole.test")).toBe(true);
     // Hostnames never matter: a mirror is whatever the user inputs
     expect(isMirrorUrl("https://kisskh.example.evil.com")).toBe(true);
   });
 
   it("rejects non-http protocols and garbage", () => {
+    expect(isMirrorUrl("ftp://kisskh.test")).toBe(false);
+    expect(isMirrorUrl("kisskh.test")).toBe(false);
     expect(isMirrorUrl("not a url")).toBe(false);
   });
 });

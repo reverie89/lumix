@@ -100,6 +100,8 @@ export function safeYear(
 }
 
 /**
+ * A kisskh host has `kisskh` as its second-level label: `kisskh.test`,
+ * `mirror.kisskh.test` — but not `kisskh.example.evil.com`. Classifies hosts
  * for the axios client selection (utils/axios.ts) and the subtitle proxy
  * allowlist (kisskh-catalogs.ts); never validates user mirrors (a mirror
  * is any http(s) URL, see isMirrorUrl).

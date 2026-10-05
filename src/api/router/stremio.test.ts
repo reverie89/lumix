@@ -14,8 +14,11 @@ const tierConfig = {
   providers: {
     kisskh: {
       mirrors: [
+        "https://kisskh.test",
+        "http://kisskh.test", // insecure but allowed: any http(s) URL is a mirror
         "https://kisskh.example.evil.com", // a mirror is any http(s) URL: lookalike hosts pass too
         "https://other.com",
+        "kisskh.test", // no scheme: rejected (the config page adds https://)
       ],
       type: ["TVSeries", "Bogus"],
       region: ["Korean", "Atlantis"],
@@ -30,6 +33,8 @@ describe("decodeConfig", () => {
     const config = decodeConfig(encode(tierConfig));
     expect(config.providers.kisskh).toEqual({
       mirrors: [
+        "https://kisskh.test",
+        "http://kisskh.test",
         "https://kisskh.example.evil.com",
         "https://other.com",
       ],
@@ -45,6 +50,27 @@ describe("decodeConfig", () => {
     expect(config.catalogs).toContain("kisskh.series.TVSeries");
     expect(config.catalogs).toContain("kisskh.series.Korean");
     expect(config.catalogs).toContain("kisskh.series.Search");
+  });
+
+  it("deduplicates mirrors, keeping the first occurrence's form", () => {
+    const config = decodeConfig(
+      encode({
+        providers: {
+          kisskh: {
+            mirrors: [
+              "https://KissKh.TEST/",
+              "https://kisskh.test", // same mirror, different case: dropped
+              "https://kisskh.test/", // same mirror, trailing slash: dropped
+              "https://kisskh2.test",
+            ],
+          },
+        },
+      }),
+    );
+    expect(config.providers.kisskh?.mirrors).toEqual([
+      "https://KissKh.TEST/",
+      "https://kisskh2.test",
+    ]);
   });
 
   it("keeps a picked zh language and reads absent, invalid or legacy values as en", () => {
@@ -69,6 +95,7 @@ describe("decodeConfig", () => {
         providers: {
           kisskh: { mirrors: [], type: ["TVSeries"], region: [], status: [], update: [] },
           ole: {
+            mirrors: ["api.ole.test"], // no scheme: the page would add https://
             type: ["Movies", "TVSeries"],
             region: ["Korean", "午夜影院"],
             update: ["Popular"],

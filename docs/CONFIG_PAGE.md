@@ -37,5 +37,7 @@ config.
 
 ## Mirrors
 
-The page auto-prefixes `https://` when the user types no scheme (see Mirrors
-in [ARCHITECTURE.md](ARCHITECTURE.md) for the defaults and the walk order).
+The page auto-prefixes `https://` when the user types no scheme, and
+deduplicates picks exactly as `normalizeConfig` does server-side (see
+Mirrors in [ARCHITECTURE.md](ARCHITECTURE.md) for the defaults, the
+injection and the walk order).

@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the provider controls are a numbered add/remove list with stacked per-provider sections; tabs and Enabled toggles are gone
 - TMDB matches persist across restarts — content mappings link once, refresh on remap and never unlink; NaN years and missing posters are handled; shared stream logic moves into the base provider
+- provider mirror defaults are a deployment setting — `KISSKH_MIRRORS` / `OLE_HOSTS` env vars feed the config page and the no-mirrors fallback instead of bundled lists
+- duplicate mirror picks collapse (case- and trailing-slash-insensitive, first occurrence wins) on the config page and in config normalization
 ## [0.2.0] - 2026-10-04
 
 ### Added
