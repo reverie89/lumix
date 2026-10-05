@@ -11,22 +11,20 @@ import {
   Subtitle,
   SubtitlesHandlerArgs,
 } from "@stremio-addon/sdk";
-import {
-  getProviderContentById,
-  ProviderContentInsertInput,
-  upsertProviderContent,
-} from "../db/queries.js";
-import ProviderService from "../service/provider/provider-service.js";
+import ProviderService, {
+  ProviderContentSource,
+} from "../service/provider/provider-service.js";
 import { KisskhScraper } from "../source/kisskh.js";
 import { OleScraper } from "../source/ole.js";
-import { ContentDetail } from "../source/meta.js";
-import { BaseProvider, Provider } from "../source/provider.js";
-import { tmdb, isTmdbEnabled } from "../source/tmdb.js";
+import { ContentDetail, ContentId } from "../source/meta.js";
+import { BaseProvider } from "../source/provider.js";
+import { tmdb, isTmdbEnabled, tmdbLanguage } from "../source/tmdb.js";
 import { cache, TTL_MS, TTL_SECS } from "../utils/cache.js";
 import { createSubtitleProxyUrl } from "../utils/domain.js";
-import { extractTitle } from "../utils/format.js";
+import { extractTitle, safeYear } from "../utils/format.js";
 import { Logger } from "../utils/logger.js";
-import { defaultConfig, Prefix, UserConfig } from "./manifest.js";
+import { defaultConfig } from "./manifest.js";
+import { Prefix, Provider, UserConfig } from "../utils/config.js";
 
 const kisskh = new KisskhScraper(Provider.KISSKH);
 const ole = new OleScraper(Provider.OLE);
@@ -37,231 +35,135 @@ const logger = new Logger("ADDON");
 // id doesn't re-run the whole upstream chain on every client retry
 const NEGATIVE_TTL_MS = 60 * 1000;
 
+// Shared cache → db → remote skeleton for the meta-id branches (imdb/tmdb):
+// memory cache first, then the db join, then the remote lookup, cached for
+// the content TTL on success
+async function resolveMetaContent(
+  contentKey: string,
+  contentType: "movie" | "series",
+  probe: ContentId,
+  season: string | undefined,
+  episode: string | undefined,
+  remote: () => Promise<ContentDetail | null>,
+  onMiss: () => void,
+): Promise<ContentDetail | null> {
+  let content: ContentDetail | null = cache.get(contentKey);
+  if (!content) {
+    content = await ProviderService.getDbContent(
+      contentType,
+      probe,
+      parseInt(season ?? "1"),
+    );
+    if (!content) {
+      content = await remote();
+      if (content) cache.set(contentKey, content, TTL_MS.content);
+      else onMiss();
+    }
+  }
+  if (!content) return null;
+  if (season) content = { ...content, season: parseInt(season) };
+  if (episode) content = { ...content, episode: parseInt(episode) };
+  return content;
+}
+
+// The providers' id-based detail lookups, normalized to (title, year) for
+// the service's content resolver
+const kisskhContentSource: ProviderContentSource = {
+  provider: Provider.KISSKH,
+  idField: "kisskhId",
+  async fetchDetail(externalId, config) {
+    const { title, releaseDate } = await kisskh.getDetail(externalId, config);
+    const extracted = extractTitle(title);
+    return {
+      title: extracted.title,
+      year:
+        extracted.year || safeYear(new Date(releaseDate).getFullYear()),
+    };
+  },
+};
+
+const oleContentSource: ProviderContentSource = {
+  provider: Provider.OLE,
+  idField: "oleId",
+  async fetchDetail(externalId, config) {
+    const { name, year: detailYear } = await ole.getDetail(
+      externalId,
+      config,
+    );
+    const extracted = extractTitle(name);
+    return {
+      title: extracted.title,
+      year: extracted.year || safeYear(detailYear),
+    };
+  },
+};
+
 async function getContent(
   args: SubtitlesHandlerArgs | CatalogHandlerArgs,
   config: UserConfig = defaultConfig,
 ): Promise<ContentDetail | null> {
+  const contentType = args.type === "series" ? "series" : "movie";
   switch (true) {
     case args.id.startsWith(Prefix.IMDB): {
       // imdb | tt0000:season:episode
       const [imdbId, season, episode] = args.id.split(":");
-      if (!imdbId) {
-        return null;
-      }
-      const contentType = args.type === "series" ? "series" : "movie";
-      const contentKey = `content:imdb:${imdbId}`;
-      const cacheContent = cache.get(contentKey);
-      let content: ContentDetail | null = cacheContent;
-      // Get from DB
-      if (!content) {
-        const dbContent = await ProviderService.getDbContent(
-          contentType,
-          { imdbId },
-          parseInt(season ?? "1"),
-        );
-        if (dbContent) {
-          content = dbContent;
-          content.imdbId = imdbId;
-        }
-      }
-      // Get from TMDB (skipped entirely when no server key is configured)
-      if (!content && isTmdbEnabled()) {
-        content = await tmdb.findDetailImdb(imdbId, contentType);
-        if (content) {
-          cache.set(contentKey, content, TTL_MS.content);
-        }
-      }
-      if (!content) {
-        logger.warn(`No TMDB found with IMDB ${imdbId}`);
-        return null;
-      }
-      if (season) content = { ...content, season: parseInt(season) };
-      if (episode) content = { ...content, episode: parseInt(episode) };
-      return content;
+      if (!imdbId) return null;
+      return resolveMetaContent(
+        `content:imdb:${imdbId}`,
+        contentType,
+        { imdbId },
+        season,
+        episode,
+        () =>
+          isTmdbEnabled()
+            ? tmdb.findDetailImdb(imdbId, contentType)
+            : Promise.resolve(null),
+        () => logger.warn(`No TMDB found with IMDB ${imdbId}`),
+      );
     }
     case args.id.startsWith(Prefix.TMDB): {
       // tmdb | tmdb:movieId
       // tmdb | tmdb:seriesId:season:episode
-      const [prefix, tmdbId, season, episode] = args.id.split(":");
-      if (!tmdbId) {
-        return null;
-      }
-      const contentType = args.type === "series" ? "series" : "movie";
-      const contentKey = `content:tmdb:${tmdbId}`;
-      const cacheContent = cache.get(contentKey);
-      let content: ContentDetail | null = cacheContent;
-      if (!content) {
-        const dbContent = await ProviderService.getDbContent(
-          contentType,
-          { tmdbId: parseInt(tmdbId) },
-          parseInt(season ?? "1"),
-        );
-        content = dbContent ? dbContent : null;
-      }
-      if (!content && isTmdbEnabled()) {
-        content = await tmdb.getDetailTmdb(tmdbId, contentType);
-        if (content) cache.set(contentKey, content, TTL_MS.content);
-      }
-      if (!content) {
-        // TMDB get from TMDB must return
-        logger.error(`Not found TMDB ${tmdbId}`);
-        return null;
-      }
-      if (season) content = { ...content, season: parseInt(season) };
-      if (episode) content = { ...content, episode: parseInt(episode) };
-      return content;
+      const [, tmdbId, season, episode] = args.id.split(":");
+      if (!tmdbId) return null;
+      return resolveMetaContent(
+        `content:tmdb:${tmdbId}`,
+        contentType,
+        { tmdbId: parseInt(tmdbId) },
+        season,
+        episode,
+        () =>
+          isTmdbEnabled()
+            ? tmdb.getDetailTmdb(tmdbId, contentType, tmdbLanguage(config))
+            : Promise.resolve(null),
+        () => logger.error(`Not found TMDB ${tmdbId}`),
+      );
     }
     case args.id.startsWith(Prefix.KISSKH): {
       // id | kisskh:episodeId:season:episode
-      const [prefix, kisskhId, season, episode] = args.id.split(":");
-      if (!kisskhId) return null;
-      const contentType = args.type === "series" ? "series" : "movie";
-      const contentKey = `content:kisskh:${kisskhId}`;
-      const cacheContent = cache.get(contentKey);
-      let content: ContentDetail | null = cacheContent;
-      if (!content) {
-        const dbContent = await ProviderService.getDbContent(
-          contentType,
-          { kisskhId },
-          parseInt(season ?? "1"),
-        );
-        if (dbContent) {
-          logger.log(`Found DB content ${contentKey}`);
-          content = dbContent;
-        }
-      }
-      if (!content) {
-        const providerContent = await getProviderContentById(
-          `${prefix}:${kisskhId}`,
-        );
-        if (providerContent) {
-          content = {
-            id: kisskhId,
-            kisskhId: kisskhId,
-            type: args.type,
-            title: providerContent.title,
-            year: providerContent.year,
-            season: season ? parseInt(season) : 1,
-            episode: episode ? parseInt(episode) : 1,
-          };
-        } else {
-          const { title, releaseDate } = await kisskh.getDetail(
-            kisskhId,
-            config,
-          );
-          const extracted = extractTitle(title);
-          const pureTitle = extracted.title;
-          const year = extracted.year || new Date(releaseDate).getFullYear();
-          content = {
-            id: kisskhId,
-            kisskhId: kisskhId,
-            type: args.type,
-            title: pureTitle,
-            year: year,
-            season: season ? parseInt(season) : 1,
-            episode: episode ? parseInt(episode) : 1,
-          };
-          const newProviderContent: ProviderContentInsertInput = {
-            id: `${Prefix.KISSKH}:${kisskhId}`,
-            contentId: null,
-            provider: Provider.KISSKH,
-            externalId: kisskhId,
-            title: pureTitle,
-            year: year,
-          };
-          upsertProviderContent(newProviderContent);
-        }
-        cache.set(contentKey, content, TTL_MS.content);
-      }
-      if (!content) {
-        logger.error(`Not found kisskh ${kisskhId}`);
-        return null;
-      }
-      // Copy before setting season/episode: the cached entry is shared
-      // between concurrent requests for different episodes of the same show
-      return {
-        ...content,
-        season: season ? parseInt(season) : 1,
-        episode: episode ? parseInt(episode) : 1,
-      };
+      const [, externalId, season, episode] = args.id.split(":");
+      if (!externalId) return null;
+      return ProviderService.resolveProviderDetail(
+        kisskhContentSource,
+        externalId,
+        contentType,
+        season,
+        episode,
+        config,
+      );
     }
     case args.id.startsWith(Prefix.OLE): {
       // id | ole:vodId:season:episode
-      const [prefix, oleId, season, episode] = args.id.split(":");
-      if (!oleId) return null;
-      const contentType = args.type === "series" ? "series" : "movie";
-      const contentKey = `content:ole:${oleId}`;
-      const cacheContent = cache.get(contentKey);
-      let content: ContentDetail | null = cacheContent;
-      if (!content) {
-        const dbContent = await ProviderService.getDbContent(
-          contentType,
-          { oleId },
-          parseInt(season ?? "1"),
-        );
-        if (dbContent) {
-          logger.log(`Found DB content ${contentKey}`);
-          content = dbContent;
-        }
-      }
-      if (!content) {
-        const providerContent = await getProviderContentById(
-          `${prefix}:${oleId}`,
-        );
-        if (providerContent) {
-          content = {
-            id: oleId,
-            oleId: oleId,
-            type: args.type,
-            title: providerContent.title,
-            year: providerContent.year,
-            season: season ? parseInt(season) : 1,
-            episode: episode ? parseInt(episode) : 1,
-          };
-        } else {
-          const { name, year: detailYear } = await ole.getDetail(
-            oleId,
-            config,
-          );
-          const extracted = extractTitle(name);
-          const pureTitle = extracted.title;
-          const year =
-            extracted.year ||
-            (Number.isFinite(parseInt(detailYear ?? ""))
-              ? parseInt(detailYear!)
-              : new Date().getFullYear());
-          content = {
-            id: oleId,
-            oleId: oleId,
-            type: args.type,
-            title: pureTitle,
-            year: year,
-            season: season ? parseInt(season) : 1,
-            episode: episode ? parseInt(episode) : 1,
-          };
-          const newProviderContent: ProviderContentInsertInput = {
-            id: `${Prefix.OLE}:${oleId}`,
-            contentId: null,
-            provider: Provider.OLE,
-            externalId: oleId,
-            title: pureTitle,
-            year: year,
-          };
-          upsertProviderContent(newProviderContent);
-        }
-        cache.set(contentKey, content, TTL_MS.content);
-      }
-      if (!content) {
-        logger.error(`Not found ole ${oleId}`);
-        return null;
-      }
-      // Copy before setting season/episode: the cached entry is shared
-      // between concurrent requests for different episodes of the same show
-      return {
-        ...content,
-        season: season ? parseInt(season) : 1,
-        episode: episode ? parseInt(episode) : 1,
-      };
+      const [, externalId, season, episode] = args.id.split(":");
+      if (!externalId) return null;
+      return ProviderService.resolveProviderDetail(
+        oleContentSource,
+        externalId,
+        contentType,
+        season,
+        episode,
+        config,
+      );
     }
   }
   return null;
@@ -384,11 +286,10 @@ export async function buildStreamHandler(
     if (streams.length > 0 && !notDone) {
       streamResults.cacheMaxAge = 1 * 60 * 60;
       cache.set(streamKey, streamResults, TTL_MS.stream);
-    } else if (streams.length > 0) {
-      // Rate-limit placeholder (no url): cache briefly so a throttled
-      // upstream isn't re-scraped by every client retry
-      cache.set(streamKey, streamResults, NEGATIVE_TTL_MS);
     } else {
+      // Nothing usable (empty, or a rate-limit placeholder without a url):
+      // cache briefly so a throttled upstream isn't re-scraped by every
+      // client retry
       cache.set(streamKey, streamResults, NEGATIVE_TTL_MS);
     }
     return streamResults;

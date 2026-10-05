@@ -40,6 +40,20 @@ const fixtures = vi.hoisted(() => {
       },
       external_ids: { imdb_id: "tt22810590" },
     },
+    // Upcoming title: TMDB serves an empty air date and a null poster
+    tvDetailUndated: {
+      id: 337252,
+      name: "Ash",
+      overview: "upcoming",
+      first_air_date: "",
+      poster_path: null,
+      images: {
+        logos: [],
+        backdrops: [],
+        posters: [],
+      },
+      external_ids: { imdb_id: null },
+    },
     img,
   };
 });
@@ -51,10 +65,14 @@ vi.mock("../utils/axios.js", () => ({
 }));
 
 // Same pattern as the optional-key test below: stub the key in, re-resolve
-// the module graph, drop the stub on the way out
+// the module graph, drop the stub on the way out. resetModules also rebuilds
+// the db graph, so each import migrates its fresh in-memory sqlite — the
+// searchMiss negative cache reads/writes it on every searchDetail.
 const importTmdb = async () => {
   vi.stubEnv("TMDB_API_KEY", "test-key");
   vi.resetModules();
+  const { initMigrations } = await import("../db/drizzle.js");
+  await initMigrations();
   return await import("./tmdb.js");
 };
 
@@ -83,6 +101,62 @@ describe("tmdbLanguage", () => {
     expect(tmdbLanguage({ language: "en" })).toBeUndefined();
     expect(tmdbLanguage({ language: "fr" })).toBeUndefined();
     expect(tmdbLanguage(undefined)).toBeUndefined();
+    vi.unstubAllEnvs();
+  });
+});
+
+describe("searchDetail negative cache", () => {
+  it("records a miss on an unmatched title and skips re-searching it", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet).mockResolvedValueOnce({ results: [] });
+    const first = await tmdb.searchDetail("Unmatchable Show", "series");
+    expect(first).toBeNull();
+    // One upstream search happened; the recorded miss suppresses the next
+    expect(requestedUrls()).toHaveLength(1);
+    const second = await tmdb.searchDetail("Unmatchable Show", "series");
+    expect(second).toBeNull();
+    expect(requestedUrls()).toHaveLength(1);
+    vi.unstubAllEnvs();
+  });
+
+  it("does not suppress searches that matched", async () => {
+    const { tmdb } = await importTmdb();
+    await tmdb.searchDetail("The Glory", "series");
+    await tmdb.searchDetail("The Glory", "series");
+    // No miss recorded for a found title — both searches ran
+    expect(requestedUrls().length).toBeGreaterThanOrEqual(4);
+    vi.unstubAllEnvs();
+  });
+
+  it("does not record a miss when the upstream search fails", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet).mockRejectedValueOnce(new Error("503 upstream"));
+    const failed = await tmdb.searchDetail("The Glory", "series");
+    expect(failed).toBeNull();
+    expect(requestedUrls()).toHaveLength(1);
+    // A failure is transient, not a verdict: the next search runs, and only
+    // that completed no-match records the miss that then suppresses retries
+    vi.mocked(axiosGet).mockResolvedValueOnce({ results: [] });
+    const empty = await tmdb.searchDetail("The Glory", "series");
+    expect(empty).toBeNull();
+    expect(requestedUrls()).toHaveLength(2);
+    await tmdb.searchDetail("The Glory", "series");
+    expect(requestedUrls()).toHaveLength(2);
+    vi.unstubAllEnvs();
+  });
+
+  it("does not record a miss when the post-match detail fetch fails", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce(fixtures.tvSearch) // search matches
+      .mockRejectedValueOnce(new Error("timeout")); // detail fetch fails
+    const failed = await tmdb.searchDetail("The Glory", "series");
+    expect(failed).toBeNull();
+    expect(requestedUrls()).toHaveLength(2);
+    // The title was never a miss — the next search starts from the top
+    vi.mocked(axiosGet).mockResolvedValueOnce({ results: [] });
+    await tmdb.searchDetail("The Glory", "series");
+    expect(requestedUrls()).toHaveLength(3);
     vi.unstubAllEnvs();
   });
 });
@@ -157,6 +231,86 @@ describe("TMDB language threading", () => {
         "/no-lang.png",
       ),
     ).toBe(true);
+    vi.unstubAllEnvs();
+  });
+});
+
+describe("degenerate TMDB responses", () => {
+  it("maps an undated, artless series without NaN years or broken poster urls", async () => {
+    const { tmdb } = await importTmdb();
+    // The search hit and the detail are both degenerate: empty air date,
+    // null poster — the shape TMDB serves for unreleased titles
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce({
+        results: [
+          {
+            id: 337252,
+            name: "Ash",
+            original_name: "Ash",
+            overview: "",
+            first_air_date: "",
+            poster_path: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce(fixtures.tvDetailUndated);
+    const detail = await tmdb.searchDetail("Ash", "series");
+    expect(detail?.tmdbId).toBe(337252);
+    // A NaN year binds as NULL and fails the NOT NULL content insert
+    expect(Number.isFinite(detail?.year ?? NaN)).toBe(true);
+    expect(detail?.year).toBeGreaterThan(1900);
+    expect(detail?.thumbnail).toBeUndefined();
+    expect(JSON.stringify(detail)).not.toContain("w500null");
+    vi.unstubAllEnvs();
+  });
+
+  it("maps an undated, artless movie find result the same way", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet).mockResolvedValueOnce({
+      movie_results: [
+        {
+          id: 337252,
+          title: "Ash",
+          original_title: "Ash",
+          overview: "",
+          release_date: "",
+          poster_path: null,
+        },
+      ],
+      person_results: [],
+      tv_results: [],
+      tv_episode_results: [],
+      tv_season_results: [],
+    });
+    const detail = await tmdb.findDetailImdb("tt0000000", "movie");
+    expect(detail?.tmdbId).toBe(337252);
+    expect(Number.isFinite(detail?.year ?? NaN)).toBe(true);
+    expect(detail?.thumbnail).toBeUndefined();
+    expect(JSON.stringify(detail)).not.toContain("w500null");
+    vi.unstubAllEnvs();
+  });
+
+  it("maps an undated series find result without NaN", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet).mockResolvedValueOnce({
+      movie_results: [],
+      person_results: [],
+      tv_results: [
+        {
+          id: 337252,
+          name: "Ash",
+          original_name: "Ash",
+          overview: "",
+          first_air_date: "",
+          poster_path: null,
+        },
+      ],
+      tv_episode_results: [],
+      tv_season_results: [],
+    });
+    const detail = await tmdb.findDetailImdb("tt0000000", "series");
+    expect(detail?.tmdbId).toBe(337252);
+    expect(Number.isFinite(detail?.year ?? NaN)).toBe(true);
     vi.unstubAllEnvs();
   });
 });

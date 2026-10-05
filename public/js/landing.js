@@ -273,8 +273,6 @@ document.querySelectorAll(".paste-btn").forEach((btn) => {
 
 // One provider entry: its panel, tier fieldsets, default mirrors, and its
 // own mirror widget state. A new provider adds a PROVIDERS entry + panel.
-// Tier keys and option values align across providers (both "update" tiers
-// carry the same Sort vocabulary — Popular / Last Update / Release Date).
 const PROVIDERS = ["kisskh", "ole"];
 const PROVIDER_TIERS = {
   kisskh: ["type", "region", "status", "update"],

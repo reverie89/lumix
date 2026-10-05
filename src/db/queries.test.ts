@@ -3,14 +3,17 @@ import { uuidv7 } from "uuidv7";
 import { ContentDetail } from "../source/meta.js";
 import {
   getContentByTmdb,
+  getSearchMiss,
   getStreamsJoinProvider,
   getSubtitlesJoinProvider,
   pruneExpiredRows,
   upsertContent,
   upsertProviderContent,
+  upsertSearchMiss,
   upsertStream,
   upsertSubtitles,
 } from "./queries.js";
+import { TTL_MS } from "../utils/cache.js";
 import { initMigrations } from "./drizzle.js";
 import { sqlite } from "./sqlite.js";
 
@@ -48,6 +51,15 @@ describe("upsertContent", () => {
     expect(second).toBe(first);
     const row = await getContentByTmdb("987001", "series");
     expect(row?.id).toBe(first);
+  });
+
+  it("stores a missing thumbnail as a null poster instead of failing", async () => {
+    // TMDB titles without artwork map to no thumbnail at all — the nullable
+    // poster column must absorb that so the row still persists
+    const id = await upsertContent(uuidv7(), tmdbContent(987005));
+    expect(id).toBeDefined();
+    const row = await getContentByTmdb("987005", "series");
+    expect(row?.poster).toBeNull();
   });
 });
 
@@ -129,5 +141,59 @@ describe("pruneExpiredRows", () => {
     const rows = await getStreamsJoinProvider(providerContentId, 1, 1);
     expect(rows?.length).toBe(1);
     expect(rows?.[0]?.stream.url).toBe(url("fresh"));
+  });
+
+  it("prunes expired search miss rows too", async () => {
+    await upsertSearchMiss({
+      id: uuidv7(),
+      title: "Pruned Miss",
+      type: "series",
+      ttl: TTL_MS.miss,
+    });
+    sqlite
+      .prepare("UPDATE search_miss SET updated_at = ? WHERE title = ?")
+      .run(Date.now() - TTL_MS.miss - 1000, "Pruned Miss");
+
+    await pruneExpiredRows();
+
+    expect(await getSearchMiss("Pruned Miss", "series")).toBeUndefined();
+  });
+});
+
+describe("search miss", () => {
+  const missRow = (title: string, ttl = TTL_MS.miss) => ({
+    id: uuidv7(),
+    title,
+    type: "series" as const,
+    ttl,
+  });
+
+  it("records a miss and serves it back per title+type", async () => {
+    await upsertSearchMiss(missRow("No Such Show"));
+    expect(await getSearchMiss("No Such Show", "series")).toBeDefined();
+    // Same title, other type: a different search, never suppressed
+    expect(await getSearchMiss("No Such Show", "movie")).toBeUndefined();
+    expect(await getSearchMiss("Other Show", "series")).toBeUndefined();
+  });
+
+  it("treats an expired miss as absent", async () => {
+    await upsertSearchMiss(missRow("Aged Out", 60 * 1000));
+    sqlite
+      .prepare("UPDATE search_miss SET updated_at = updated_at - ?")
+      .run(61 * 1000);
+    expect(await getSearchMiss("Aged Out", "series")).toBeUndefined();
+  });
+
+  it("re-arms the expiry on re-record instead of keeping the stale arm time", async () => {
+    await upsertSearchMiss(missRow("Re-armed"));
+    sqlite
+      .prepare("UPDATE search_miss SET updated_at = updated_at - ?")
+      .run(TTL_MS.miss + 1000);
+    expect(await getSearchMiss("Re-armed", "series")).toBeUndefined();
+    // A re-record writes a fresh uuid against the same unique (title, type):
+    // it must update the row AND move updatedAt forward, or the miss would
+    // expire immediately on every subsequent read
+    await upsertSearchMiss(missRow("Re-armed"));
+    expect(await getSearchMiss("Re-armed", "series")).toBeDefined();
   });
 });

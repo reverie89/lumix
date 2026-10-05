@@ -3,6 +3,8 @@ import {
   getCountStream,
   getStreamsJoinProvider,
 } from "../../db/queries.js";
+import { isExpired } from "../../utils/cache.js";
+import { RATE_LIMIT_DESCRIPTION } from "../../utils/constant.js";
 import {
   extractSeason,
   formatStreamFilename,
@@ -10,6 +12,22 @@ import {
 } from "../../utils/format.js";
 
 class StreamService {
+  /**
+   * Placeholder row for a rate-limited provider: no url (it can't play),
+   * just a retryable entry grouped under the provider's bingeGroup.
+   */
+  static rateLimitPlaceholder(displayName: string, name: string): Stream {
+    return {
+      name: displayName,
+      description: RATE_LIMIT_DESCRIPTION,
+      behaviorHints: {
+        notWebReady: true,
+        bingeGroup: displayName,
+        filename: `${RATE_LIMIT_DESCRIPTION}-${name}`,
+      },
+    };
+  }
+
   static async getDbStreams(
     id: string,
     season: number,
@@ -25,19 +43,16 @@ class StreamService {
       const streams = streamsAndProvider.map((stream) => {
         const url = stream.stream.url;
         const provider = stream.provider_content.provider;
-        const isExpired =
-          stream.stream.updatedAt.getTime() + (stream.stream.ttl ?? 0) <
-          Date.now();
-        if (isExpired) {
+        if (isExpired(stream.stream.updatedAt, stream.stream.ttl)) {
           return;
         }
         season = extractSeason(stream.provider_content.title).season ?? 1;
         const { title, year } = stream.provider_content;
         const description = formatStreamTitle(title, year, season, episode);
         const filename = `${formatStreamFilename(title, year, season, episode)}-${provider}`;
-        // Same key as the live path in kisskh.ts so auto-play grouping
-        // survives a cache miss
-        const bingeGroup = `${displayName}`;
+        // Same key as the live path in BaseProvider.buildStream so
+        // auto-play grouping survives a cache miss
+        const bingeGroup = displayName;
         return {
           url,
           name: displayName,

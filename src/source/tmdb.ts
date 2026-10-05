@@ -1,11 +1,14 @@
 import { ContentType } from "@stremio-addon/sdk";
 import { AxiosRequestConfig } from "axios";
 import { URLSearchParams } from "url";
+import { uuidv7 } from "uuidv7";
+import { getSearchMiss, upsertSearchMiss } from "../db/queries.js";
 import { axiosGet } from "../utils/axios.js";
+import { TTL_MS } from "../utils/cache.js";
 import { USER_AGENT } from "../utils/constant.js";
 import { ENV } from "../utils/env.js";
-import { handleError, TmdbError } from "../utils/error.js";
-import { extractTitle } from "../utils/format.js";
+import { handleError, FuseError, MatchingError, TmdbError } from "../utils/error.js";
+import { extractTitle, safeYear } from "../utils/format.js";
 import { matchTitle } from "../utils/fuse.js";
 import { Logger } from "../utils/logger.js";
 import { getProxyUrl } from "../utils/proxy/proxy.js";
@@ -34,9 +37,10 @@ export interface TmdbTvResult {
   name: string;
   original_name: string;
   overview: string;
-  first_air_date: string;
-  poster_path: string;
-  backdrop_path?: string;
+  // Empty string for unreleased titles, null when the field is absent
+  first_air_date: string | null;
+  poster_path: string | null;
+  backdrop_path?: string | null;
 }
 export interface TmdbTvImages {
   backdrops: TmdbTvImage[];
@@ -72,9 +76,9 @@ export interface TmdbMovieResult {
   title: string;
   original_title: string;
   overview: string;
-  release_date: string;
-  poster_path: string;
-  backdrop_path?: string;
+  release_date: string | null;
+  poster_path: string | null;
+  backdrop_path?: string | null;
 }
 
 interface TmdbMovieSearch {
@@ -97,8 +101,8 @@ export type TmdbLanguage = "zh-CN" | undefined;
 
 /**
  * Config language → TMDB request language. Undefined means English: the
- * request then omits the `language` param entirely, so English URLs (and
- * their axiosGet cache entries) stay byte-identical to before localization.
+ * request then omits the `language` param entirely, so English and
+ * localized requests land in separate axiosGet cache entries.
  */
 export function tmdbLanguage(config?: { language?: string }): TmdbLanguage {
   return config?.language === "zh" ? "zh-CN" : undefined;
@@ -115,6 +119,15 @@ class TMDBService {
   private baseUrl: string = `https://${TMDB_HOST}/3`;
   private imageUrl: string = "https://image.tmdb.org";
 
+  // TMDB serves images only at real file paths — a missing poster/backdrop
+  // must degrade to undefined, never concatenate into a broken URL
+  private image(
+    path: string | null | undefined,
+    size = "w500",
+  ): string | undefined {
+    return path ? `${this.imageUrl}/t/p/${size}${path}` : undefined;
+  }
+
   // Search
   // The /search calls stay parameterless (English): result titles feed
   // matchTitle, and resolved titles later drive the providers' own search
@@ -126,59 +139,80 @@ class TMDBService {
     year?: number,
     language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
+    if (!isTmdbEnabled()) return null;
     const extracted = extractTitle(search);
     const season = extracted.season || 1;
-    search = extracted.title;
+    const title = extracted.title;
     if (season == 1) {
       year = extracted.year || year;
     } else {
       year = undefined;
     }
-    if (type === "series") {
-      return await this.searchSeriesDetail(search, year, language);
-    } else {
-      return await this.searchMovieDetail(search, year, language);
+    // Negative cache: the searchMiss table remembers titles TMDB failed to
+    // match, so catalog re-renders (restarts included) skip them until the
+    // miss expires instead of re-searching every one. matchTitle signals a
+    // completed search that matched nothing by throwing FuseError or
+    // MatchingError — only those failures count as a miss. Any other error
+    // is a transient upstream failure and must stay retryable.
+    const dbType = type === "movie" ? "movie" : "series";
+    if (await getSearchMiss(title, dbType)) return null;
+    try {
+      const detail =
+        type === "series"
+          ? await this.searchSeriesDetail(title, year, language)
+          : await this.searchMovieDetail(title, year, language);
+      if (!detail) {
+        await this.recordSearchMiss(title, dbType);
+      }
+      return detail;
+    } catch (error: any) {
+      if (!(error instanceof FuseError) && !(error instanceof MatchingError)) {
+        handleError(error, this.logger, `Search ${dbType}`);
+        return null;
+      }
+      await this.recordSearchMiss(title, dbType);
+      return null;
     }
   }
 
-  async searchSeriesDetail(
+  private async recordSearchMiss(title: string, dbType: "movie" | "series") {
+    await upsertSearchMiss({
+      id: uuidv7(),
+      title: title,
+      type: dbType,
+      ttl: TTL_MS.miss,
+    });
+  }
+
+  private async searchSeriesDetail(
     title: string,
     year?: number,
     language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
-    try {
-      const response = await this.getSearchSeries(title, year);
-      const titles = response.results.map((result) => {
-        const year = new Date(result.first_air_date).getFullYear();
-        const thumbnail = result.poster_path
-          ? `${this.imageUrl}/t/p/w500${result.poster_path}`
-          : "";
-        const search: ContentDetail = {
-          id: result.id.toString(),
-          title: result.name,
-          overview: result.overview,
-          thumbnail: thumbnail,
-          year: year,
-          type: "series",
-          tmdbId: result.id,
-        };
-        return search;
-      });
-      const detail = matchTitle<ContentDetail>(titles, title, year);
-      const tv = detail[0];
-      if (tv) {
-        this.logger.log(`Found | ${tv.title} ${tv.year} ${tv.imdbId || ""}`);
-        const detail = await this.getSeriesDetail(tv.id, language);
-        return detail;
-      }
-      return null;
-    } catch (error: any) {
-      handleError(error, this.logger, `Search series`);
-      return null;
+    const response = await this.getSearchSeries(title, year);
+    const titles = response.results.map((result) => {
+      const search: ContentDetail = {
+        id: result.id.toString(),
+        title: result.name,
+        overview: result.overview,
+        year: safeYear(result.first_air_date),
+        type: "series",
+        tmdbId: result.id,
+      };
+      const thumbnail = this.image(result.poster_path);
+      if (thumbnail) search.thumbnail = thumbnail;
+      return search;
+    });
+    const detail = matchTitle<ContentDetail>(titles, title, year);
+    const tv = detail[0];
+    if (tv) {
+      this.logger.log(`Found | ${tv.title} ${tv.year} ${tv.imdbId || ""}`);
+      return await this.getDetailById(tv.id, "series", language);
     }
+    return null;
   }
 
-  async getSearchSeries(title: string, year?: number): Promise<TmdbTvSearch> {
+  private async getSearchSeries(title: string, year?: number): Promise<TmdbTvSearch> {
     if (year) {
       const param = { query: title, year: year };
       return await this._getRequest(`/search/tv`, param);
@@ -186,30 +220,24 @@ class TMDBService {
     return await this._getRequest(`/search/tv`, { query: title });
   }
 
-  async searchMovieDetail(
+  private async searchMovieDetail(
     title: string,
     year?: number,
     language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
-    try {
-      const movieResponse = await this.getSearchMovie(title, year);
-      const results = this.getMovies(movieResponse.results);
-      const movie = matchTitle(results, title, year)[0];
-      if (movie) {
-        this.logger.log(
-          `Found | ${movie.title} ${movie.year} ${movie.imdbId || ""}`,
-        );
-        const detail = await this.getMovieDetail(movie.id, language);
-        return detail;
-      }
-      return null;
-    } catch (error: any) {
-      handleError(error, this.logger, `Search movie`);
-      return null;
+    const movieResponse = await this.getSearchMovie(title, year);
+    const results = this.getMovies(movieResponse.results);
+    const movie = matchTitle(results, title, year)[0];
+    if (movie) {
+      this.logger.log(
+        `Found | ${movie.title} ${movie.year} ${movie.imdbId || ""}`,
+      );
+      return await this.getDetailById(movie.id, "movie", language);
     }
+    return null;
   }
 
-  async getSearchMovie(title: string, year?: number): Promise<TmdbMovieSearch> {
+  private async getSearchMovie(title: string, year?: number): Promise<TmdbMovieSearch> {
     if (year) {
       const param = { query: title, year: year };
       return await this._getRequest(`/search/movie`, param);
@@ -229,7 +257,7 @@ class TMDBService {
     }
   }
 
-  async findSeriesDetail(imdbId: string): Promise<ContentDetail | null> {
+  private async findSeriesDetail(imdbId: string): Promise<ContentDetail | null> {
     try {
       const seriesResponse: TmdbFindResponse = await this._getRequest(
         "/find/" + imdbId,
@@ -240,7 +268,7 @@ class TMDBService {
       this.logger.debug(JSON.stringify(seriesResponse));
       const series = seriesResponse.tv_results[0];
       if (series) {
-        const year = new Date(series.first_air_date).getFullYear();
+        const year = safeYear(series.first_air_date);
         return {
           id: imdbId,
           title: series.name,
@@ -259,7 +287,7 @@ class TMDBService {
     }
   }
 
-  async findMovieDetail(imdbId: string): Promise<ContentDetail | null> {
+  private async findMovieDetail(imdbId: string): Promise<ContentDetail | null> {
     try {
       const movieResponse: TmdbFindResponse = await this._getRequest(
         "/find/" + imdbId,
@@ -281,135 +309,92 @@ class TMDBService {
   }
 
   // Get TMDB
+  // Id-based fetches degrade to null on error so callers fall back to
+  // provider data; only searchDetail turns failures into negative cache
   async getDetailTmdb(
     tmdbId: string,
     type: ContentType,
+    language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
-    if (type === "series") {
-      return await this.getSeriesDetail(tmdbId);
-    } else {
-      return await this.getMovieDetail(tmdbId);
+    try {
+      return await this.getDetailById(
+        tmdbId,
+        type === "series" ? "series" : "movie",
+        language,
+      );
+    } catch (error: any) {
+      handleError(error, this.logger, `Get ${type} details error`);
+      return null;
     }
   }
 
-  getMovies(movies: TmdbMovieResult[]) {
+  private getMovies(movies: TmdbMovieResult[]) {
     return movies.map((movie) => {
       return this.toDetail(movie);
     });
   }
 
-  toDetail(movie: TmdbMovieResult): ContentDetail {
-    const year = new Date(movie.release_date).getFullYear();
-    const thumbnail = `${this.imageUrl}/t/p/w500${movie.poster_path}`;
-    const background = movie.backdrop_path
-      ? `${this.imageUrl}/t/p/w500${movie.backdrop_path}`
-      : undefined;
+  private toDetail(movie: TmdbMovieResult): ContentDetail {
+    const year = safeYear(movie.release_date);
+    const thumbnail = this.image(movie.poster_path);
+    const background = this.image(movie.backdrop_path);
     const content: ContentDetail = {
       id: movie.id.toString(),
       title: movie.title,
       overview: movie.overview,
-      thumbnail: thumbnail,
       year: year,
       type: "movie",
       tmdbId: movie.id,
     };
+    if (thumbnail) content.thumbnail = thumbnail;
     if (background) content.background = background;
     if (movie.imdb_id) content.imdbId = movie.imdb_id;
     return content;
   }
 
-  async getMovieDetail(
+  /**
+   * Id-based detail with images + external ids appended. The movie/tv
+   * surfaces differ only in field names (name/first_air_date vs title/
+   * release_date) — one builder serves both; movies additionally carry a
+   * top-level imdb_id.
+   */
+  private async getDetailById(
     tmdbId: string,
+    type: "movie" | "series",
     language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
     this.logger.debug(`ID ${tmdbId}`);
-    try {
-      const movie = await this.getMovieDetailImageExternalId(tmdbId, language);
-      if (!movie) return null;
-      const images = movie.images;
-      const externalId = movie.external_ids;
-      const year = new Date(movie.release_date).getFullYear();
-      const thumbnail = `${this.imageUrl}/t/p/w500${movie.poster_path}`;
-      const content: ContentDetail = {
-        id: movie.id.toString(),
-        title: movie.title,
-        overview: movie.overview,
-        thumbnail: thumbnail,
-        year: year,
-        type: "movie",
-        tmdbId: movie.id,
-      };
-      if (movie.imdb_id) content.imdbId = movie.imdb_id;
-      if (externalId?.imdb_id) content.imdbId = externalId.imdb_id;
-      const { logo, background } = this.extractLogoAndBackground(
-        images,
-        language,
-      );
-      if (logo) content.logo = logo;
-      if (background) content.background = background;
-      return content;
-    } catch (error: any) {
-      handleError(error, this.logger, `Get movie details error`);
-      return null;
-    }
-  }
-
-  async getSeriesDetail(
-    tmdbId: string,
-    language?: TmdbLanguage,
-  ): Promise<ContentDetail | null> {
-    this.logger.debug(`ID ${tmdbId}`);
-    try {
-      const series = await this.getTvDetailImageExternalId(tmdbId, language);
-      if (!series) return null;
-      const images = series.images;
-      const externalId = series.external_ids;
-      const year = new Date(series.first_air_date).getFullYear();
-      const thumbnail = `${this.imageUrl}/t/p/w500${series.poster_path}`;
-      const content: ContentDetail = {
-        id: series.id.toString(),
-        title: series.name,
-        overview: series.overview,
-        year: year,
-        type: "series",
-        tmdbId: series.id,
-        thumbnail: thumbnail,
-      };
-      if (externalId?.imdb_id) content.imdbId = externalId.imdb_id;
-      const { logo, background } = this.extractLogoAndBackground(
-        images,
-        language,
-      );
-      if (logo) content.logo = logo;
-      if (background) content.background = background;
-      return content;
-    } catch (error: any) {
-      handleError(error, this.logger, `Get series details error`);
-      return null;
-    }
-  }
-
-  // Combined request
-  async getTvDetailImageExternalId(
-    id: string,
-    language?: TmdbLanguage,
-  ): Promise<TmdbTvImagesExternalId> {
-    return await this._getRequest<TmdbTvImagesExternalId>(
-      `/tv/${id}?append_to_response=images,external_ids${imageLanguageParams(language)}`,
+    const segment = type === "series" ? "tv" : "movie";
+    const raw = await this._getRequest<
+      TmdbMovieImagesExternalId | TmdbTvImagesExternalId
+    >(
+      `/${segment}/${tmdbId}?append_to_response=images,external_ids${imageLanguageParams(language)}`,
       {},
       language,
     );
-  }
-
-  async getMovieDetailImageExternalId(
-    id: string,
-    language?: TmdbLanguage,
-  ): Promise<TmdbMovieImagesExternalId> {
-    return await this._getRequest<TmdbMovieImagesExternalId>(
-      `/movie/${id}?append_to_response=images,external_ids${imageLanguageParams(language)}`,
-      {},
+    if (!raw) return null;
+    const title = "name" in raw ? raw.name : raw.title;
+    const date = "first_air_date" in raw ? raw.first_air_date : raw.release_date;
+    const imdb = raw.external_ids?.imdb_id ?? raw.imdb_id;
+    const year = safeYear(date);
+    const thumbnail = this.image(raw.poster_path);
+    const content: ContentDetail = {
+      id: raw.id.toString(),
+      title,
+      overview: raw.overview,
+      year,
+      type,
+      tmdbId: raw.id,
+    };
+    if (thumbnail) content.thumbnail = thumbnail;
+    if (imdb) content.imdbId = imdb;
+    const { logo, background } = this.extractLogoAndBackground(
+      raw.images,
       language,
     );
+    if (logo) content.logo = logo;
+    if (background) content.background = background;
+    return content;
   }
 
   extractLogoAndBackground(
@@ -432,10 +417,8 @@ class TMDBService {
       images.backdrops[0]?.file_path ||
       "";
 
-    const logo = logoPath ? `${this.imageUrl}/t/p/w500${logoPath}` : "";
-    const background = backdropPath
-      ? `${this.imageUrl}/t/p/original${backdropPath}`
-      : "";
+    const logo = this.image(logoPath) ?? "";
+    const background = this.image(backdropPath, "original") ?? "";
     return { logo, background };
   }
 

@@ -3,6 +3,7 @@
 // derive from these tables. Kept free of imports from kisskh.ts/provider.ts
 // to avoid cycles.
 import { KISSKH_CDN_DOMAIN } from "../utils/constant.js";
+import { expandPicks, normalizeTierOrder } from "../utils/catalog.js";
 import { isKisskhHost } from "../utils/format.js";
 
 const KISSKH_TYPE_OPTIONS = [
@@ -107,7 +108,7 @@ export function getKisskhQuery(
   return null;
 }
 
-export type KisskhTier = "type" | "region" | "status" | "update";
+type KisskhTier = "type" | "region" | "status" | "update";
 
 // Tier order the config page shows and expandKisskhCatalogs follows when a
 // config carries no order of its own.
@@ -119,7 +120,7 @@ export const KISSKH_TIER_ORDER: readonly KisskhTier[] = [
 ];
 
 /** Tier picks as they arrive from a decoded config (order optional). */
-export type KisskhTiers = {
+type KisskhTiers = {
   order?: readonly string[];
   type: string[];
   region: string[];
@@ -128,7 +129,7 @@ export type KisskhTiers = {
 };
 
 /** normalizeKisskhTiers output: validated picks plus a full tier order. */
-export type NormalizedKisskhTiers = Omit<KisskhTiers, "order"> & {
+type NormalizedKisskhTiers = Omit<KisskhTiers, "order"> & {
   order: readonly KisskhTier[];
 };
 
@@ -197,23 +198,12 @@ export const KISSKH_HIDDEN_CATALOGS = [
  * way: unknown tiers dropped, missing tiers appended in canonical order.
  */
 export function normalizeKisskhTiers(settings: KisskhTiers): NormalizedKisskhTiers {
-  const expand = (values: string[], known: readonly string[]) =>
-    values.includes("__all__")
-      ? [...known]
-      : [...new Set(values.filter((value) => known.includes(value)))];
-  const knownTiers = KISSKH_TIER_ORDER as readonly string[];
-  const picked = [
-    ...new Set(settings.order ?? []),
-  ].filter((tier): tier is KisskhTier => knownTiers.includes(tier));
   return {
-    order: [
-      ...picked,
-      ...KISSKH_TIER_ORDER.filter((tier) => !picked.includes(tier)),
-    ],
-    type: expand(settings.type, KISSKH_TYPE_OPTIONS),
-    region: expand(settings.region, KISSKH_REGION_OPTIONS),
-    status: expand(settings.status, KISSKH_STATUS_OPTIONS),
-    update: expand(settings.update, KISSKH_UPDATE_OPTIONS),
+    order: normalizeTierOrder(settings.order, KISSKH_TIER_ORDER),
+    type: expandPicks(settings.type, KISSKH_TYPE_OPTIONS),
+    region: expandPicks(settings.region, KISSKH_REGION_OPTIONS),
+    status: expandPicks(settings.status, KISSKH_STATUS_OPTIONS),
+    update: expandPicks(settings.update, KISSKH_UPDATE_OPTIONS),
   };
 }
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetaDetail } from "@stremio-addon/sdk";
 import { OleScraper, vvParam } from "./ole.js";
-import { Provider } from "./provider.js";
+import { Provider } from "../utils/config.js";
 import { OLE_DEFAULT_MIRRORS } from "../utils/constant.js";
 
 const axiosGet = vi.hoisted(() =>

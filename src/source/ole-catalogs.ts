@@ -5,6 +5,7 @@
 // same name: Korean, TVSeries, Update…) so both providers read identically in
 // configs, manifest rows and the Stremio UI; the Chinese strings below are
 // upstream API values only, never config values.
+import { expandPicks, normalizeTierOrder } from "../utils/catalog.js";
 
 export const OLE_TYPE_OPTIONS = [
   "TVSeries",
@@ -105,7 +106,7 @@ export function getOleQuery(
   return null;
 }
 
-export type OleTier = "type" | "region" | "update";
+type OleTier = "type" | "region" | "update";
 
 // Tier order the config page shows and expandOleCatalogs follows when a
 // config carries no order of its own.
@@ -116,7 +117,7 @@ export const OLE_TIER_ORDER: readonly OleTier[] = [
 ];
 
 /** Tier picks as they arrive from a decoded config (order optional). */
-export type OleTiers = {
+type OleTiers = {
   order?: readonly string[];
   type: string[];
   region: string[];
@@ -124,7 +125,7 @@ export type OleTiers = {
 };
 
 /** normalizeOleTiers output: validated picks plus a full tier order. */
-export type NormalizedOleTiers = Omit<OleTiers, "order"> & {
+type NormalizedOleTiers = Omit<OleTiers, "order"> & {
   order: readonly OleTier[];
 };
 
@@ -177,21 +178,10 @@ export const OLE_HIDDEN_CATALOGS = [
 export function normalizeOleTiers(
   settings: OleTiers,
 ): NormalizedOleTiers {
-  const expand = (values: string[], known: readonly string[]) =>
-    values.includes("__all__")
-      ? [...known]
-      : [...new Set(values.filter((value) => known.includes(value)))];
-  const knownTiers = OLE_TIER_ORDER as readonly string[];
-  const picked = [
-    ...new Set(settings.order ?? []),
-  ].filter((tier): tier is OleTier => knownTiers.includes(tier));
   return {
-    order: [
-      ...picked,
-      ...OLE_TIER_ORDER.filter((tier) => !picked.includes(tier)),
-    ],
-    type: expand(settings.type, OLE_TYPE_OPTIONS),
-    region: expand(settings.region, OLE_REGION_OPTIONS),
-    update: expand(settings.update, OLE_UPDATE_OPTIONS),
+    order: normalizeTierOrder(settings.order, OLE_TIER_ORDER),
+    type: expandPicks(settings.type, OLE_TYPE_OPTIONS),
+    region: expandPicks(settings.region, OLE_REGION_OPTIONS),
+    update: expandPicks(settings.update, OLE_UPDATE_OPTIONS),
   };
 }

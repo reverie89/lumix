@@ -53,10 +53,13 @@ used by both the page's server-side expansion and the manifest builder) and
 Option names are shared where the concept is shared (Korean, TVSeries,
 Update…) — each catalogs file maps them to its own upstream API values. A
 category change touches the catalogs file, the `TIER_OPTIONS` table in
-`public/js/landing.js` — nothing else. Their unit tests pin the
-row-expansion rules (each type pick is its own row; region/update picks add
-a series + movies pair; kisskh status rows are series-only; kisskh US
-queries the Hollywood type; ole Movies is the only movie-side type).
+`public/js/landing.js`, and both zh label tables (`TIER_LABELS_ZH` in
+`src/utils/constant.ts`, `OPTION_LABELS_ZH` in `landing.js`) — nothing
+else; the manifest's label-completeness test enforces the server side.
+Their unit tests pin the row-expansion rules (each type pick is its own
+row; region/update picks add a series + movies pair; kisskh status rows are
+series-only; kisskh US queries the Hollywood type; ole Movies is the
+only movie-side type).
 
 Tier picks default to the explicit sets in `src/lib/manifest.ts`
 `defaultKisskhSettings` / `defaultOleSettings` (the unconfigured
@@ -92,8 +95,13 @@ per provider). The page-side mirror UX is in
 ## Provider contract and vocabulary
 
 The abstract `BaseProvider` (`src/source/provider.ts`) defines the provider
-contract; `getMeta`/`getSubtitles` take an optional `config` so providers
-can read per-user settings (mirrors).
+contract: the base owns the shared `getStreams`/`buildStream` template,
+`toPreview` and the TMDB year override — a scraper implements the
+catalog/meta/subtitle methods plus the stream hooks (`providerIdField`,
+`resolveStreamTarget`, `generateStreams`). `getMeta`/`getSubtitles` take an
+optional `config` so providers can read per-user settings (mirrors).
+`Provider`/`Prefix`/`UserConfig` live in `src/utils/config.ts` (leaf
+vocabulary — no upward imports).
 
 ### Adding a provider
 

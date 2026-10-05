@@ -7,14 +7,13 @@ import axios, {
 import EventEmitter from "events";
 import https from "https";
 import { cache } from "./cache.js";
-import { USER_AGENT } from "./constant.js";
+import { BROWSER_HEADERS, USER_AGENT } from "./constant.js";
 import { ENV } from "./env.js";
 import { RateLimitError } from "./error.js";
 import { isKisskhHost } from "./format.js";
 import { Logger } from "./logger.js";
 import { getWebshareProxyConfig } from "./proxy/webshare.js";
 
-// process.setMaxListeners(20);
 EventEmitter.defaultMaxListeners = 23;
 const httpsAgent = new https.Agent({
   keepAlive: true,
@@ -45,11 +44,7 @@ function createClient(
 
 const defaultClient = createClient({
   "User-Agent": USER_AGENT,
-  Accept: "application/json",
-  "Accept-Language": "en-US,en;q=0.5",
-  "Accept-Encoding": "gzip, deflate",
-  Connection: "keep-alive",
-  "Upgrade-Insecure-Requests": "1",
+  ...BROWSER_HEADERS,
 });
 
 // Mirrors are user-supplied: never follow redirects, or a 302 could escape

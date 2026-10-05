@@ -15,6 +15,13 @@ const publicRouter = new Hono();
 const rootDir = process.cwd();
 const publicDir = path.join(rootDir, "public");
 
+// Placeholder host for the config page's ole mirror input — derived from
+// the default so it can't drift when the default host rotates (an empty
+// list degrades to an empty placeholder; new URL("") would throw)
+const oleHost = OLE_DEFAULT_MIRRORS[0]
+  ? new URL(OLE_DEFAULT_MIRRORS[0]).hostname
+  : "";
+
 // Asset URLs are fingerprinted with a content hash: Cloudflare's edge
 // caches /js and /css past the origin TTL, so a redeploy can pair fresh
 // HTML with yesterday's landing.js and break the config page. Changing the
@@ -46,6 +53,8 @@ const getLandingPage = () => {
       "{{OLE_DEFAULT_MIRRORS}}",
       JSON.stringify(OLE_DEFAULT_MIRRORS),
     )
+    // The mirror input's placeholder tracks the default host (see oleHost)
+    .replace("{{OLE_HOST}}", oleHost)
     // The tagline only credits TMDB on deployments that actually enrich with
     // it; both languages' credit text ships as one payload the page appends
     // to its (localized) tagline

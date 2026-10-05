@@ -3,6 +3,7 @@ import {
   getCountSubtitles,
   getSubtitlesJoinProvider,
 } from "../../db/queries.js";
+import { isExpired } from "../../utils/cache.js";
 import { languageNameFromIso639 } from "../../utils/language.js";
 
 export type SubtitleRow = NonNullable<
@@ -20,9 +21,7 @@ export function toSubtitle(
   providerContentId: string,
   row: SubtitleRow,
 ): Subtitle | undefined {
-  const isExpired =
-    row.subtitle.updatedAt.getTime() + (row.subtitle.ttl ?? 0) < Date.now();
-  if (isExpired) {
+  if (isExpired(row.subtitle.updatedAt, row.subtitle.ttl)) {
     return undefined;
   }
   return {

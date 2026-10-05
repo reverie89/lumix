@@ -11,18 +11,12 @@ import * as cheerio from "cheerio";
 import vm from "node:vm";
 import { uuidv7 } from "uuidv7";
 import {
-  getContentByTmdb,
-  getProviderContentById,
-  upsertContent,
-  upsertProviderContent,
-  upsertStream,
   upsertSubtitles,
 } from "../db/queries.js";
 import { ESubtitleInsert } from "../db/schema/subtitle.js";
-import { Prefix, UserConfig } from "../lib/manifest.js";
+import { Prefix, UserConfig } from "../utils/config.js";
 import { MirrorFailover } from "../service/mirror-failover.js";
 import ProviderService from "../service/provider/provider-service.js";
-import StreamService from "../service/resource/stream-service.js";
 import SubtitleService from "../service/resource/subtitle-service.js";
 import { axiosGet } from "../utils/axios.js";
 import { cache, TTL_MS } from "../utils/cache.js";
@@ -32,7 +26,7 @@ import {
   RATE_LIMIT_DESCRIPTION,
 } from "../utils/constant.js";
 import { handleError, KisskhDetailError, KisskhEpisodeError, KisskhTokenError, RateLimitError } from "../utils/error.js";
-import { cleanUrl, formatStreamFilename, formatStreamTitle, parseOrigin } from "../utils/format.js";
+import { cleanUrl, parseOrigin, safeYear } from "../utils/format.js";
 import { matchTitle } from "../utils/fuse.js";
 import { CountryCode, iso639FromCountryCode } from "../utils/language.js";
 import { Logger } from "../utils/logger.js";
@@ -40,7 +34,7 @@ import { getKisskhQuery } from "./kisskh-catalogs.js";
 import { getSubtitleVtt } from "./kisskh-subtitle.js";
 import { ContentDetail } from "./meta.js";
 import { BaseProvider } from "./provider.js";
-import { tmdb, isTmdbEnabled, tmdbLanguage } from "./tmdb.js";
+import { tmdb, tmdbLanguage } from "./tmdb.js";
 
 interface SearchResult {
   id: number;
@@ -167,24 +161,13 @@ export class KisskhScraper extends BaseProvider {
       })
       .slice(0, this.pageSize);
     const metas = await Promise.all(
-      filterResults.map(async (kissItem) => {
-        const { poster } = await ProviderService.resolveProviderPoster(
-          this.name,
-          kissItem.id,
-          kissItem.title,
-          kissItem.thumbnail,
-          type,
-        );
-
-        const meta: MetaPreview = {
-          id: `${Prefix.KISSKH}:${kissItem.id}`,
-          name: kissItem.title,
-          type: type,
+      filterResults.map((kissItem) =>
+        this.toPreview(kissItem, kissItem.title, type, kissItem.thumbnail, {
+          // kisskh keeps its own upstream thumbnail as the background (same
+          // rule as getCatalog)
           background: kissItem.thumbnail,
-          poster: poster,
-        };
-        return meta;
-      }),
+        }),
+      ),
     );
     return metas;
   }
@@ -199,7 +182,7 @@ export class KisskhScraper extends BaseProvider {
   ): Promise<MetaPreview[]> {
     const { id, type, extra } = args;
     const skip = extra.skip;
-    const [prefix, typeStr, name] = id.split(".");
+    const [, , name] = id.split(".");
     const dbContentType = type === "movie" ? "movie" : "series";
     const query = getKisskhQuery(name ?? "", dbContentType);
     if (!query) {
@@ -215,64 +198,15 @@ export class KisskhScraper extends BaseProvider {
     const catalogData = await kisskhFailover.get<KisskhCatalogData>(url);
     const flatDatas = Array.isArray(catalogData?.data) ? catalogData.data : [];
 
-    // Map to final Meta format. Posters resolve DB-first (see resolvePoster):
-    // only unmapped titles cost a TMDB search, and each hit persists its
-    // mapping so the next render skips TMDB entirely.
     const metas = await Promise.all(
-      flatDatas.map(async (kissItem) => {
-        const id = `${Prefix.KISSKH}:${kissItem.id}`;
-        const { poster, detail: tmdbDetail } =
-          await ProviderService.resolveProviderPoster(
-            this.name,
-            kissItem.id,
-            kissItem.title,
-            kissItem.thumbnail,
-            type,
-          );
-
-        // Persist a fresh TMDB match (skipped for DB-resolved items, which
-        // already have their rows)
-        if (tmdbDetail) {
-          const contentTmdbId = this.kisskhTmdb.get(kissItem.id) ?? tmdbDetail.id;
-          const existingContent = await getContentByTmdb(
-            contentTmdbId,
-            dbContentType,
-          );
-          let contentId: string = uuidv7();
-          if (existingContent) {
-            contentId = existingContent.id;
-          } else {
-            contentId =
-              (await upsertContent(
-                contentId,
-                { ...tmdbDetail, id: contentTmdbId },
-              )) ?? contentId;
-            upsertProviderContent({
-              title: kissItem.title,
-              contentId: contentId,
-              provider: this.name,
-              externalId: kissItem.id.toString(),
-              year: tmdbDetail.year,
-              id: id,
-            });
-          }
-        }
-        const metaDetail: MetaDetail = {
-          id: id,
-          name: kissItem.title,
-          type: type,
+      flatDatas.map((kissItem) =>
+        this.toPreview(kissItem, kissItem.title, type, kissItem.thumbnail, {
+          // kisskh keeps its own upstream thumbnail as the background; the
+          // resolved poster (TMDB when mapped) fills the poster slot
           background: kissItem.thumbnail,
-          poster: poster,
-        };
-
-        if (type === "movie") {
-          metaDetail.behaviorHints = {
-            defaultVideoId: `${id}:1:1`,
-          };
-          return metaDetail;
-        }
-        return metaDetail;
-      }),
+          lookupTmdbId: this.kisskhTmdb.get(kissItem.id),
+        }),
+      ),
     );
     return metas;
   }
@@ -284,47 +218,26 @@ export class KisskhScraper extends BaseProvider {
   ): Promise<MetaDetail | null> {
     const detail = await this.getDetail(content.id, config);
     const episodes = Array.isArray(detail.episodes) ? detail.episodes : [];
-    // releaseDate has been missing/invalid upstream before; never feed an
-    // invalid Date to toISOString (it throws RangeError)
+    // Upstream releaseDate may be missing or invalid: an invalid Date
+    // throws RangeError on toISOString
     const releaseDate = new Date(detail.releaseDate);
-    const fallbackDate = new Date();
     const validRelease = !Number.isNaN(releaseDate.getTime());
-    let year = validRelease ? releaseDate.getFullYear() : fallbackDate.getFullYear();
-    let date = (validRelease ? releaseDate : fallbackDate).toISOString();
+    let year = safeYear(validRelease ? releaseDate.getFullYear() : undefined);
+    let date = (validRelease ? releaseDate : new Date()).toISOString();
     // TMDB text localizes to the config language (matching stays English,
     // see searchDetail)
-    const tmdbDetail = isTmdbEnabled()
-      ? await tmdb.searchDetail(
-          detail.title,
-          type,
-          undefined,
-          tmdbLanguage(config),
-        )
-      : null;
+    const tmdbDetail = await tmdb.searchDetail(
+      detail.title,
+      type,
+      undefined,
+      tmdbLanguage(config),
+    );
     const background = tmdbDetail?.background || detail.thumbnail;
     const metaId = `${Prefix.KISSKH}:${detail.id}`;
-    // The two reads are independent — run them together
-    const [oldContent, existingContent] = await Promise.all([
-      tmdbDetail
-        ? getContentByTmdb(
-            tmdbDetail.id,
-            type === "movie" ? "movie" : "series",
-          )
-        : Promise.resolve(undefined),
-      getProviderContentById(metaId),
-    ]);
     if (tmdbDetail) {
       detail.description = tmdbDetail.overview || detail.description;
-      if (Number.isFinite(tmdbDetail.year) && tmdbDetail.year > 0) {
-        year = tmdbDetail.year;
-        const tmdbDate = new Date();
-        tmdbDate.setFullYear(tmdbDetail.year);
-        date = tmdbDate.toISOString();
-      }
-      if (oldContent) {
-        upsertContent(oldContent.id, tmdbDetail);
-      }
     }
+    ({ year, date } = this.tmdbReleaseDate(year, date, tmdbDetail));
     const season = 1;
     const videos: MetaVideo[] = episodes.map((ep) => {
       const episodeNum = ep.number;
@@ -355,90 +268,40 @@ export class KisskhScraper extends BaseProvider {
       videos: videos,
     };
 
-    const contentId = oldContent ? oldContent.id : null;
-    if (existingContent && oldContent) {
-      await upsertProviderContent({
-        ...existingContent,
-        contentId: contentId,
-        year: year,
-      });
-    } else {
-      await upsertProviderContent({
-        id: metaId,
-        contentId: contentId,
-        title: detail.title,
-        provider: this.name,
-        externalId: detail.id,
-        year: year,
-      });
-    }
+    // Persist the mapping (linked when TMDB matched, unlinked otherwise) so
+    // the next catalog/meta pass resolves from the DB
+    await ProviderService.persistContentMapping(
+      tmdbDetail,
+      this.name,
+      detail.id,
+      detail.title,
+      { year: year },
+    );
     return meta;
   }
 
-  async getStreams(
+  protected providerIdField = "kisskhId" as const;
+
+  /**
+   * The stream target: the content's kisskh id when present, else a title
+   * search across the picked mirrors.
+   */
+  protected async resolveStreamTarget(
     content: ContentDetail,
     config: UserConfig,
-  ): Promise<Stream[]> {
-    this.logger.log(`Stream | ${content.title} ${content.id}`);
-    const { title, type, year, season, episode, id, kisskhId } =
-      content;
-    try {
-      const streamKey = `streams:${type}:${this.name}:${id}:${season}:${episode}`;
-      const cacheStreams = cache.get(streamKey);
-      if (cacheStreams) return cacheStreams;
-      const dbStreams = await StreamService.getDbStreams(
-        `${this.name}:${kisskhId}`,
-        1,
-        episode ?? 1,
-        this.displayName,
-      );
-      if (dbStreams.length > 0) {
-        cache.set(streamKey, dbStreams, TTL_MS.stream);
-        return dbStreams;
-      }
-      let streamId = parseInt(kisskhId ?? "0");
-      let streamTitle = title;
-      if (!kisskhId) {
-        const searchResult = await this.searchContent(
-          title,
-          type,
-          year,
-          season,
-          true,
-          config,
-        );
-        if (!searchResult[0]) {
-          this.logger.log("No results");
-          return [];
-        }
-        const search = searchResult[0];
-        streamId = search.id;
-        streamTitle = search.title;
-      }
-      const streams = await this.generateStreamsAndSubtitles(
-        streamId,
-        streamTitle,
-        content,
-        config,
-      );
-      if (streams.length > 0) cache.set(streamKey, streams, TTL_MS.stream);
-      return streams;
-    } catch (error: any) {
-      handleError(error, this.logger);
-      if (error instanceof RateLimitError)
-        return [
-          {
-            name: this.displayName,
-            description: RATE_LIMIT_DESCRIPTION,
-            behaviorHints: {
-              notWebReady: true,
-              bingeGroup: `${this.displayName}`,
-              filename: `${RATE_LIMIT_DESCRIPTION}-${this.name}`,
-            },
-          },
-        ];
-      return [];
-    }
+  ): Promise<number | null> {
+    const { title, type, year, season, kisskhId } = content;
+    if (kisskhId) return parseInt(kisskhId);
+    const searchResult = await this.searchContent(
+      title,
+      type,
+      year,
+      season,
+      true,
+      config,
+    );
+    const search = searchResult[0];
+    return search ? search.id : null;
   }
 
   async getSubtitles(
@@ -504,60 +367,22 @@ export class KisskhScraper extends BaseProvider {
     }
   }
 
-  async generateStreamsAndSubtitles(
+  protected async generateStreams(
     kisskhId: number,
-    title: string,
     content: ContentDetail,
     config: UserConfig,
   ): Promise<Stream[]> {
-    const { episode, id, season, year, type } = content;
-    const { episodeId, kisskhDetail } = await this._getEpisode(
-      kisskhId,
-      episode,
-      config,
-    );
+    const { episode } = content;
+    const { episodeId } = await this._getEpisode(kisskhId, episode, config);
     const token = await this._getToken(episodeId, this.viGuid, config);
     const stream = await this._getStream(episodeId, token, config);
     if (!stream) return [];
     if (!stream.Video) return [];
     const url = this._fixUrl(stream.Video);
-    // Persistence only — the streams below don't need it, so don't block
-    // the response on two TMDB round-trips
-    ProviderService.syncContentAndProvider(
-      content,
-      kisskhId.toString(),
-      this.name,
-      config,
-    ).catch((error) => handleError(error, this.logger, `Sync content failed`));
     // Handle rate limit
     if (stream.Video.includes(RATE_LIMIT_DESCRIPTION))
       throw new RateLimitError(content.title);
-    const formatTitle = formatStreamTitle(title, year, season, episode);
-    const streamDatas: Stream[] = [
-      {
-        url: url,
-        name: this.displayName,
-        description: formatTitle,
-        behaviorHints: {
-          notWebReady: true,
-          bingeGroup: `${this.displayName}`,
-          filename: `${formatStreamFilename(title, year, season, episode)}-${this.name}`,
-        },
-      },
-    ];
-    upsertStream([
-      {
-        id: uuidv7(),
-        providerContentId: `${this.name}:${kisskhId}`,
-        provider: this.name,
-        externalId: kisskhId.toString(),
-        season: "1",
-        episode: episode?.toString() ?? "1",
-        url: cleanUrl(url),
-        ttl: TTL_MS.stream,
-      },
-    ]);
-    return streamDatas;
+    return this.buildStream(kisskhId, url, content, config);
   }
 
   private async _getToken(

@@ -1,6 +1,7 @@
 import {
   AddonBuilder,
   createRouter,
+  Manifest,
   MetaDetail,
   MetaPreview,
   ShortManifestResource,
@@ -8,6 +9,7 @@ import {
   Subtitle,
 } from "@stremio-addon/sdk";
 import { rateLimiter } from "hono-rate-limiter";
+import { Hono, type Context } from "hono";
 import {
   buildCatalogHandler,
   buildMetaHandler,
@@ -17,10 +19,13 @@ import {
 import {
   buildManifest,
   defaultConfig,
-  Prefix,
-  UserConfig,
 } from "../../lib/manifest.js";
-import { Hono } from "hono";
+import {
+  Prefix,
+  Provider,
+  ProviderSettings,
+  UserConfig,
+} from "../../utils/config.js";
 import { getSubtitleVtt } from "../../source/kisskh-subtitle.js";
 import {
   expandKisskhCatalogs,
@@ -35,7 +40,6 @@ import {
   normalizeOleTiers,
   OLE_HIDDEN_CATALOGS,
 } from "../../source/ole-catalogs.js";
-import { Provider } from "../../source/provider.js";
 import { isMirrorUrl } from "../../utils/format.js";
 import { SHORT_NAME } from "../../utils/constant.js";
 import { ENV } from "../../utils/env.js";
@@ -194,41 +198,69 @@ interface RouteConfig {
   route: string;
   limiter: ReturnType<typeof rateLimiter>;
 }
+
+// One AddonBuilder wiring shared by both route families: the default routes
+// serve the unconfigured manifest, the config-scoped ones a decoded config —
+// handlers register against the manifest's advertised resources either way
+function registerAddonRoutes(
+  routes: RouteConfig[],
+  scope: (
+    origin: string,
+    c: Context,
+  ) => { config: UserConfig; manifest: Manifest },
+) {
+  routes.forEach((route) => {
+    stremio.use(route.route, route.limiter);
+    stremio.get(route.route, async (c) => {
+      const origin = getRequestOrigin(c);
+      const { config, manifest } = scope(origin, c);
+      const builder = new AddonBuilder(manifest);
+      const resources = new Set(
+        manifest.resources.map((r) => (typeof r === "string" ? r : r.name)),
+      );
+      if (resources.has("catalog")) {
+        builder.defineCatalogHandler(async (args) => {
+          return await buildCatalogHandler(args, config);
+        });
+      }
+      if (resources.has("meta")) {
+        builder.defineMetaHandler(async (args) => {
+          return await buildMetaHandler(args, config);
+        });
+      }
+      if (resources.has("stream")) {
+        builder.defineStreamHandler(async (args) => {
+          return await buildStreamHandler(args, config);
+        });
+      }
+      if (resources.has("subtitles")) {
+        builder.defineSubtitlesHandler(async (args) => {
+          return await buildSubtitleHandler(args, config, origin);
+        });
+      }
+      const addonRouter = createRouter(builder.getInterface());
+      const response = await addonRouter(c.req.raw);
+      if (response) {
+        c.header(
+          "Cache-Control",
+          response.headers.get("Cache-Control") || "no-cache",
+        );
+      }
+      return response || c.notFound();
+    });
+  });
+}
+
 const stremioRouteConfigs: RouteConfig[] = [
   { route: "/catalog/*", limiter: catalogLimiter },
   { route: "/meta/*", limiter: metaLimiter },
   { route: "/stream/*", limiter: streamLimiter },
   { route: "/subtitles/*", limiter: subtitlesLimiter },
 ];
-stremioRouteConfigs.forEach((config) => {
-  stremio.use(config.route, config.limiter);
-  stremio.get(config.route, async (c) => {
-    const origin = getRequestOrigin(c);
-    const defaultManifest = buildManifest(undefined, origin);
-    const builder = new AddonBuilder(defaultManifest);
-    builder.defineCatalogHandler(async (args) => {
-      return await buildCatalogHandler(args);
-    });
-    builder.defineMetaHandler(async (args) => {
-      return await buildMetaHandler(args);
-    });
-    builder.defineStreamHandler(async (args) => {
-      return await buildStreamHandler(args);
-    });
-    builder.defineSubtitlesHandler(async (args) => {
-      return await buildSubtitleHandler(args, defaultConfig, origin);
-    });
-    const addonRouter = createRouter(builder.getInterface());
-    const response = await addonRouter(c.req.raw);
-    if (response) {
-      c.header(
-        "Cache-Control",
-        response.headers.get("Cache-Control") || "no-cache",
-      );
-    }
-    return response || c.notFound();
-  });
-});
+registerAddonRoutes(stremioRouteConfigs, (origin) => ({
+  config: defaultConfig,
+  manifest: buildManifest(undefined, origin),
+}));
 
 const asStringArray = (value: any): string[] =>
   Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
@@ -257,6 +289,22 @@ function normalizeProviderOrder(values: string[]): Provider[] {
   ];
 }
 
+// A provider block present in the config contributes its mirrors, its
+// expanded catalog rows (hidden Search rows close the block) and both
+// provider lists — in the config's own order
+function addProviderBlock(
+  config: UserConfig,
+  provider: Provider,
+  settings: ProviderSettings,
+  catalogs: string[],
+  hidden: readonly string[],
+) {
+  config.providers[provider] = settings;
+  config.catalogs.push(...catalogs, ...hidden);
+  config.catalog.push(provider);
+  config.stream.push(provider);
+}
+
 /**
  * Normalize a decoded config: validate mirrors and tier picks, expand catalog
  * ids and derive catalog/stream providers. Providers contribute in the
@@ -279,6 +327,7 @@ function normalizeConfig(raw: any): UserConfig {
   for (const provider of normalizeProviderOrder(asStringArray(raw?.order))) {
     const rawSettings = raw?.providers?.[provider];
     if (!rawSettings || typeof rawSettings !== "object") continue;
+    const mirrors = asStringArray(rawSettings.mirrors).filter(isMirrorUrl);
     if (provider === Provider.KISSKH) {
       const tiers = normalizeKisskhTiers({
         order: asStringArray(rawSettings.order),
@@ -287,14 +336,13 @@ function normalizeConfig(raw: any): UserConfig {
         status: asStringArray(rawSettings.status),
         update: asStringArray(rawSettings.update),
       });
-      const mirrors = asStringArray(rawSettings.mirrors).filter(isMirrorUrl);
-      config.providers.kisskh = { ...tiers, mirrors };
-      config.catalogs.push(
-        ...expandKisskhCatalogs(tiers),
-        ...KISSKH_HIDDEN_CATALOGS,
+      addProviderBlock(
+        config,
+        provider,
+        { ...tiers, mirrors },
+        expandKisskhCatalogs(tiers),
+        KISSKH_HIDDEN_CATALOGS,
       );
-      config.catalog.push(Provider.KISSKH);
-      config.stream.push(Provider.KISSKH);
     } else {
       const tiers = normalizeOleTiers({
         order: asStringArray(rawSettings.order),
@@ -302,14 +350,13 @@ function normalizeConfig(raw: any): UserConfig {
         region: asStringArray(rawSettings.region),
         update: asStringArray(rawSettings.update),
       });
-      const mirrors = asStringArray(rawSettings.mirrors).filter(isMirrorUrl);
-      config.providers.ole = { ...tiers, mirrors };
-      config.catalogs.push(
-        ...expandOleCatalogs(tiers),
-        ...OLE_HIDDEN_CATALOGS,
+      addProviderBlock(
+        config,
+        provider,
+        { ...tiers, mirrors },
+        expandOleCatalogs(tiers),
+        OLE_HIDDEN_CATALOGS,
       );
-      config.catalog.push(Provider.OLE);
-      config.stream.push(Provider.OLE);
     }
   }
 
@@ -376,49 +423,9 @@ const configStremioRoutes: RouteConfig[] = [
   { route: "/:configBase64/stream/*", limiter: streamLimiter },
   { route: "/:configBase64/subtitles/*", limiter: subtitlesLimiter },
 ];
-configStremioRoutes.forEach((route) => {
-  stremio.use(route.route, route.limiter);
-  stremio.get(route.route, async (c) => {
-    const origin = getRequestOrigin(c);
-    const configBase64 = c.req.param("configBase64") as string;
-    const config = decodeConfig(configBase64);
-    const manifest = buildManifest(config, origin);
-    const builder = new AddonBuilder(manifest);
-    if (manifest.resources.includes("catalog")) {
-      builder.defineCatalogHandler(async (args) => {
-        return await buildCatalogHandler(args, config);
-      });
-    }
-    if (
-      manifest.resources.includes("meta") ||
-      manifest.resources.some(
-        (r) => typeof r === "object" && "name" in r && r.name === "meta",
-      )
-    ) {
-      builder.defineMetaHandler(async (args) => {
-        return await buildMetaHandler(args, config);
-      });
-    }
-    if (manifest.resources.includes("stream")) {
-      builder.defineStreamHandler(async (args) => {
-        return await buildStreamHandler(args, config);
-      });
-    }
-    if (manifest.resources.includes("subtitles")) {
-      builder.defineSubtitlesHandler(async (args) => {
-        return await buildSubtitleHandler(args, config, origin);
-      });
-    }
-    const customRouter = createRouter(builder.getInterface());
-    const response = await customRouter(c.req.raw);
-    if (response) {
-      c.header(
-        "Cache-Control",
-        response.headers.get("Cache-Control") || "no-cache",
-      );
-    }
-    return response || c.notFound();
-  });
+registerAddonRoutes(configStremioRoutes, (origin, c) => {
+  const config = decodeConfig(c.req.param("configBase64") as string);
+  return { config, manifest: buildManifest(config, origin) };
 });
 
 // Serve subtitles converted to WebVTT. The upstream URL is attacker-

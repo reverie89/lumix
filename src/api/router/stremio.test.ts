@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Provider } from "../../source/provider.js";
+import { Provider } from "../../utils/config.js";
 import { defaultConfig } from "../../lib/manifest.js";
 import {
   KISSKH_DEFAULT_MIRRORS,
@@ -14,7 +14,7 @@ const tierConfig = {
   providers: {
     kisskh: {
       mirrors: [
-        "https://kisskh.example.evil.com", // hostnames no longer matter
+        "https://kisskh.example.evil.com", // a mirror is any http(s) URL: lookalike hosts pass too
         "https://other.com",
       ],
       type: ["TVSeries", "Bogus"],

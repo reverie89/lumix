@@ -8,33 +8,20 @@ import {
   Subtitle,
 } from "@stremio-addon/sdk";
 import crypto from "node:crypto";
-import { uuidv7 } from "uuidv7";
-import {
-  getContentByTmdb,
-  getProviderContentById,
-  upsertContent,
-  upsertProviderContent,
-  upsertStream,
-} from "../db/queries.js";
-import { Prefix, UserConfig } from "../lib/manifest.js";
+import { Prefix, UserConfig } from "../utils/config.js";
 import { MirrorFailover } from "../service/mirror-failover.js";
 import ProviderService from "../service/provider/provider-service.js";
-import StreamService from "../service/resource/stream-service.js";
-import { axiosGet } from "../utils/axios.js";
-import { cache, TTL_MS } from "../utils/cache.js";
 import {
   MIRROR_FAIL_TTL_MS,
   OLE_DEFAULT_MIRRORS,
-  RATE_LIMIT_DESCRIPTION,
 } from "../utils/constant.js";
-import { handleError, OleDetailError, RateLimitError } from "../utils/error.js";
-import { cleanUrl, formatStreamFilename, formatStreamTitle } from "../utils/format.js";
-import { matchTitle } from "../utils/fuse.js";
+import { OleDetailError } from "../utils/error.js";
+import { safeYear } from "../utils/format.js";
 import { Logger } from "../utils/logger.js";
 import { getOleQuery } from "./ole-catalogs.js";
 import { ContentDetail } from "./meta.js";
 import { BaseProvider } from "./provider.js";
-import { tmdb, isTmdbEnabled, tmdbLanguage } from "./tmdb.js";
+import { tmdb, tmdbLanguage } from "./tmdb.js";
 
 // pic/picThumb come back site-relative ("upload/vod/...jpg"); the static
 // host serves the same paths cross-origin. The site URL is the Referer the
@@ -199,9 +186,16 @@ export class OleScraper extends BaseProvider {
     if (!search) return [];
     const results = await this.searchContent(search, type, config);
     return Promise.all(
-      results.slice(0, this.pageSize).map((item) =>
-        this.toPreview(item, type),
-      ),
+      results
+        .slice(0, this.pageSize)
+        .map((item) =>
+          this.toPreview(
+            item,
+            item.name,
+            type,
+            this.imageUrl(item.picThumb || item.pic),
+          ),
+        ),
     );
   }
 
@@ -229,7 +223,16 @@ export class OleScraper extends BaseProvider {
     this.logger.log(`GET catalog | ${path}`);
     const data = await this.getApi<VodListData>(path, config);
     const items = (data?.list ?? []).filter(isPlayable);
-    return Promise.all(items.map((item) => this.toPreview(item, type)));
+    return Promise.all(
+      items.map((item) =>
+        this.toPreview(
+          item,
+          item.name,
+          type,
+          this.imageUrl(item.picThumb || item.pic),
+        ),
+      ),
+    );
   }
 
   async getMeta(
@@ -239,49 +242,20 @@ export class OleScraper extends BaseProvider {
   ): Promise<MetaDetail | null> {
     const detail = await this.getDetail(content.id, config);
     const poster = this.imageUrl(detail.picThumb || detail.pic);
-    // Upstream year is a string ("2026") and may be missing
-    const parsedYear = parseInt(detail.year ?? "");
-    const fallbackDate = new Date();
-    let year = Number.isFinite(parsedYear) ? parsedYear : fallbackDate.getFullYear();
-    let date = fallbackDate.toISOString();
+    let year = safeYear(detail.year);
+    let date = new Date().toISOString();
     // TMDB text localizes to the config language (matching stays English,
     // see searchDetail)
-    const tmdbDetail = isTmdbEnabled()
-      ? await tmdb.searchDetail(
-          detail.name,
-          type,
-          undefined,
-          tmdbLanguage(config),
-        )
-      : null;
+    const tmdbDetail = await tmdb.searchDetail(
+      detail.name,
+      type,
+      undefined,
+      tmdbLanguage(config),
+    );
     const background = tmdbDetail?.background || poster;
     const metaId = `${Prefix.OLE}:${detail.id}`;
     const description = tmdbDetail?.overview || detail.content || detail.blurb || "";
-    if (tmdbDetail) {
-      if (Number.isFinite(tmdbDetail.year) && tmdbDetail.year > 0) {
-        year = tmdbDetail.year;
-        const tmdbDate = new Date();
-        tmdbDate.setFullYear(tmdbDetail.year);
-        date = tmdbDate.toISOString();
-      }
-      const oldContent = await getContentByTmdb(
-        tmdbDetail.id,
-        type === "movie" ? "movie" : "series",
-      );
-      if (oldContent) {
-        upsertContent(oldContent.id, tmdbDetail);
-        // Persist the TMDB linkage so the next catalog render resolves its
-        // art from the DB (resolveProviderPoster)
-        upsertProviderContent({
-          id: metaId,
-          contentId: oldContent.id,
-          title: detail.name,
-          provider: this.name,
-          externalId: detail.id.toString(),
-          year: year,
-        });
-      }
-    }
+    ({ year, date } = this.tmdbReleaseDate(year, date, tmdbDetail));
     const season = 1;
     const videos: MetaVideo[] = this.freeEpisodes(detail).map((episodeUrl) => ({
       id: `ole:${detail.id}:${season}:${episodeUrl.index}`,
@@ -294,17 +268,15 @@ export class OleScraper extends BaseProvider {
       season: season,
       episode: episodeUrl.index,
     }));
-    const existingContent = await getProviderContentById(metaId);
-    if (!existingContent?.contentId) {
-      upsertProviderContent({
-        id: metaId,
-        contentId: null,
-        title: detail.name,
-        provider: this.name,
-        externalId: detail.id.toString(),
-        year: year,
-      });
-    }
+    // Persist the mapping (linked when TMDB matched, unlinked otherwise) so
+    // the next catalog/meta pass resolves from the DB
+    await ProviderService.persistContentMapping(
+      tmdbDetail,
+      this.name,
+      detail.id,
+      detail.name,
+      { year: year },
+    );
     const meta: MetaDetail = {
       id: metaId,
       name: detail.name,
@@ -320,56 +292,49 @@ export class OleScraper extends BaseProvider {
     return meta;
   }
 
-  async getStreams(
+  protected providerIdField = "oleId" as const;
+
+  /**
+   * The stream target: the content's ole vod id when present (and
+   * numeric), else a title search against the API host.
+   */
+  protected async resolveStreamTarget(
+    content: ContentDetail,
+    config: UserConfig,
+  ): Promise<number | null> {
+    const { title, type, oleId } = content;
+    const extId = parseInt(oleId ?? "0");
+    if (extId) return extId;
+    const searchResult = await this.searchContent(title, type, config);
+    const search = searchResult[0];
+    return search ? search.id : null;
+  }
+
+  /**
+   * Free-tier episode urls, in upstream order. vip_urls mirror the same
+   * streams for paying users — ignored.
+   */
+  private freeEpisodes(detail: VodDetailData): VodEpisodeUrl[] {
+    return (detail.urls ?? []).filter(
+      (episodeUrl) => !episodeUrl.vip && !!episodeUrl.url,
+    );
+  }
+
+  protected async generateStreams(
+    vodId: number,
     content: ContentDetail,
     config: UserConfig,
   ): Promise<Stream[]> {
-    this.logger.log(`Stream | ${content.title} ${content.id}`);
-    const { title, type, year, season, episode, id, oleId } = content;
-    try {
-      const streamKey = `streams:${type}:${this.name}:${id}:${season}:${episode}`;
-      const cacheStreams = cache.get(streamKey);
-      if (cacheStreams) return cacheStreams;
-      const dbStreams = await StreamService.getDbStreams(
-        `${this.name}:${oleId}`,
-        1,
-        episode ?? 1,
-        this.displayName,
-      );
-      if (dbStreams.length > 0) {
-        cache.set(streamKey, dbStreams, TTL_MS.stream);
-        return dbStreams;
-      }
-      let vodId = parseInt(oleId ?? "0");
-      let streamTitle = title;
-      if (!vodId) {
-        const searchResult = await this.searchContent(title, type, config);
-        if (!searchResult[0]) {
-          this.logger.log("No results");
-          return [];
-        }
-        vodId = searchResult[0].id;
-        streamTitle = searchResult[0].name;
-      }
-      const streams = await this.generateStreams(vodId, streamTitle, content, config);
-      if (streams.length > 0) cache.set(streamKey, streams, TTL_MS.stream);
-      return streams;
-    } catch (error: any) {
-      handleError(error, this.logger);
-      if (error instanceof RateLimitError)
-        return [
-          {
-            name: this.displayName,
-            description: RATE_LIMIT_DESCRIPTION,
-            behaviorHints: {
-              notWebReady: true,
-              bingeGroup: `${this.displayName}`,
-              filename: `${RATE_LIMIT_DESCRIPTION}-${this.name}`,
-            },
-          },
-        ];
-      return [];
-    }
+    const { episode } = content;
+    const detail = await this.getDetail(vodId.toString(), config);
+    const episodes = this.freeEpisodes(detail);
+    // Episodes are 1-based via urls[].index; when the number is out of
+    // range (season packs, re-numbered shows) fall back to the last episode
+    const episodeUrl =
+      episodes.find((candidate) => candidate.index === (episode ?? 1)) ??
+      episodes[episodes.length - 1];
+    if (!episodeUrl) return [];
+    return this.buildStream(vodId, episodeUrl.url, content, config);
   }
 
   /**
@@ -415,96 +380,5 @@ export class OleScraper extends BaseProvider {
     const detail = await this.getApi<VodDetailData>(path, config);
     if (detail) return detail;
     throw new OleDetailError(`Not found detail from id | ${vodId}`);
-  }
-
-  /**
-   * Free-tier episode urls, in upstream order. vip_urls mirror the same
-   * streams for paying users — ignored.
-   */
-  private freeEpisodes(detail: VodDetailData): VodEpisodeUrl[] {
-    return (detail.urls ?? []).filter(
-      (episodeUrl) => !episodeUrl.vip && !!episodeUrl.url,
-    );
-  }
-
-  private async generateStreams(
-    vodId: number,
-    title: string,
-    content: ContentDetail,
-    config: UserConfig,
-  ): Promise<Stream[]> {
-    const { episode, season, year, type } = content;
-    const detail = await this.getDetail(vodId.toString(), config);
-    const episodes = this.freeEpisodes(detail);
-    // Episodes are 1-based via urls[].index; when the number is out of
-    // range (season packs, re-numbered shows) fall back to the last episode
-    const episodeUrl =
-      episodes.find((candidate) => candidate.index === (episode ?? 1)) ??
-      episodes[episodes.length - 1];
-    if (!episodeUrl) return [];
-    const url = episodeUrl.url;
-    // Persistence only — the stream below doesn't need it, so don't block
-    // the response on the TMDB round-trip
-    ProviderService.syncContentAndProvider(
-      content,
-      vodId.toString(),
-      this.name,
-      config,
-    ).catch((error) => handleError(error, this.logger, `Sync content failed`));
-    const formatTitle = formatStreamTitle(title, year, season, episode);
-    const streamDatas: Stream[] = [
-      {
-        url: url,
-        name: this.displayName,
-        description: formatTitle,
-        behaviorHints: {
-          notWebReady: true,
-          bingeGroup: `${this.displayName}`,
-          filename: `${formatStreamFilename(title, year, season, episode)}-${this.name}`,
-        },
-      },
-    ];
-    upsertStream([
-      {
-        id: uuidv7(),
-        providerContentId: `${this.name}:${vodId}`,
-        provider: this.name,
-        externalId: vodId.toString(),
-        season: "1",
-        episode: episode?.toString() ?? "1",
-        url: cleanUrl(url),
-        ttl: TTL_MS.stream,
-      },
-    ]);
-    return streamDatas;
-  }
-
-  private async toPreview(
-    item: VodItem,
-    type: ContentType,
-  ): Promise<MetaPreview> {
-    const id = `${Prefix.OLE}:${item.id}`;
-    const poster = this.imageUrl(item.picThumb || item.pic);
-    const { poster: resolved } = await ProviderService.resolveProviderPoster(
-      this.name,
-      item.id,
-      item.name,
-      poster,
-      type,
-    );
-    const metaDetail: MetaDetail = {
-      id: id,
-      name: item.name,
-      type: type,
-      background: resolved,
-      poster: resolved,
-    };
-    if (type === "movie") {
-      metaDetail.behaviorHints = {
-        defaultVideoId: `${id}:1:1`,
-      };
-      return metaDetail;
-    }
-    return metaDetail;
   }
 }

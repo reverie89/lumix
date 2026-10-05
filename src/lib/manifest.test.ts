@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { KisskhSettings, OleSettings } from "./manifest.js";
-import { buildManifest, defaultConfig, UserConfig } from "./manifest.js";
-import { Provider } from "../source/provider.js";
+import type { KisskhSettings, OleSettings, UserConfig } from "../utils/config.js";
+import { buildManifest, defaultConfig } from "./manifest.js";
+import { Provider } from "../utils/config.js";
 import { KISSKH_HIDDEN_CATALOGS, normalizeKisskhTiers } from "../source/kisskh-catalogs.js";
 import { OLE_HIDDEN_CATALOGS, normalizeOleTiers } from "../source/ole-catalogs.js";
 import {

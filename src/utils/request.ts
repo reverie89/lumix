@@ -34,9 +34,5 @@ export function extractHeaderInfo(c: Context) {
       c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
       socketAddress(c)
     : socketAddress(c);
-  const country = c.req.header("cf-ipcountry") || "";
-  const url = c.req.url;
-  const origin = c.req.header("origin") || c.req.header("referer") || "";
-  const userAgent = c.req.header("user-agent") || "";
-  return { ip, country, url, origin, userAgent };
+  return { ip };
 }

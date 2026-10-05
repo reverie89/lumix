@@ -1,6 +1,7 @@
 import type { ContentType } from "@stremio-addon/sdk";
 import { and, count, eq, sql } from "drizzle-orm";
 import type { ContentDetail } from "../source/meta.js";
+import { isExpired } from "../utils/cache.js";
 import { handleError } from "../utils/error.js";
 import { Logger } from "../utils/logger.js";
 import { db } from "./drizzle.js";
@@ -12,6 +13,7 @@ import {
 } from "./schema/provider_content.js";
 import { stream, StreamInsert } from "./schema/stream.js";
 import { ESubtitleInsert, subtitle } from "./schema/subtitle.js";
+import { ESearchMissInsert, searchMiss } from "./schema/search_miss.js";
 
 const logger = new Logger("DB");
 
@@ -114,8 +116,8 @@ export async function getContentJoinProviderById(
 }
 
 /**
- * Delete rows whose ttl has passed — stream/subtitle rows are otherwise
- * only filtered at read time and accumulate forever. Run at startup.
+ * Delete rows whose ttl has passed — stream/subtitle/search-miss rows are
+ * otherwise only filtered at read time and accumulate forever. Run at startup.
  */
 export async function pruneExpiredRows() {
   const now = Date.now();
@@ -123,6 +125,7 @@ export async function pruneExpiredRows() {
     for (const [name, table] of [
       ["stream", stream],
       ["subtitle", subtitle],
+      ["search miss", searchMiss],
     ] as const) {
       const result = await db.run(
         sql`DELETE FROM ${table} WHERE ttl IS NOT NULL AND updated_at + ttl < ${now}`,
@@ -334,4 +337,50 @@ export async function getSubtitlesJoinProvider(
 export async function getCountSubtitles() {
   const number = await db.select({ count: count(subtitle.id) }).from(subtitle);
   return number;
+}
+
+// SEARCH_MISS
+/**
+ * Remember titles TMDB could not match, so an unmatched catalog title costs
+ * one search per miss TTL instead of one per restart (warm-cache re-renders
+ * included). A re-record must re-arm both ttl and updatedAt — the prune and
+ * read paths both expire on updated_at + ttl.
+ */
+export async function upsertSearchMiss(
+  row: Omit<ESearchMissInsert, "createdAt" | "updatedAt">,
+) {
+  try {
+    await db
+      .insert(searchMiss)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [searchMiss.title, searchMiss.type],
+        set: {
+          ttl: sql.raw(`excluded.${searchMiss.ttl.name}`),
+          updatedAt: sql.raw(`excluded.${searchMiss.updatedAt.name}`),
+        },
+      });
+    logger.debug(`Upserted search miss ${row.title}`);
+  } catch (e) {
+    handleError(e, logger, `Failed to upsert search miss ${row.title}`);
+  }
+}
+
+/**
+ * Live miss rows only — expired rows are pruned at startup but linger
+ * mid-run, so the read enforces updatedAt + ttl like the stream/subtitle
+ * services do.
+ */
+export async function getSearchMiss(title: string, type: "movie" | "series") {
+  try {
+    const row = await db.query.searchMiss.findFirst({
+      where: { title, type },
+    });
+    if (!row) return undefined;
+    if (isExpired(row.updatedAt, row.ttl)) return undefined;
+    return row;
+  } catch (e) {
+    handleError(e, logger, `Failed to read search miss ${title}`);
+    return undefined;
+  }
 }

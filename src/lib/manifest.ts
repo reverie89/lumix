@@ -7,7 +7,13 @@ import {
   ManifestExtra,
 } from "@stremio-addon/sdk";
 import pkg from "../../package.json" with { type: "json" };
-import { Provider } from "../source/provider.js";
+import type {
+  ConfigLanguage,
+  KisskhSettings,
+  OleSettings,
+  UserConfig,
+} from "../utils/config.js";
+import { Prefix, Provider } from "../utils/config.js";
 import {
   expandKisskhCatalogs,
   KISSKH_HIDDEN_CATALOGS,
@@ -22,49 +28,6 @@ import {
   SHORT_NAME,
   TIER_LABELS_ZH,
 } from "../utils/constant.js";
-
-export interface KisskhSettings {
-  mirrors: string[];
-  // Tier order (the page's tier-group order); canonical when absent
-  order?: readonly string[];
-  type: string[];
-  region: string[];
-  status: string[];
-  update: string[];
-}
-
-export interface OleSettings {
-  mirrors: string[];
-  // Tier order (the page's tier-group order); canonical when absent
-  order?: readonly string[];
-  type: string[];
-  region: string[];
-  update: string[];
-}
-
-// One entry per provider tab on the config page
-export type ProviderSettings = KisskhSettings | OleSettings;
-
-// Page + Stremio display language, picked on the config page before the
-// provider tabs. Legacy configs predate the field and read as "en".
-export type ConfigLanguage = "en" | "zh";
-
-export interface UserConfig {
-  language: ConfigLanguage;
-  // Per-provider settings (one entry per provider tab on the config page)
-  providers: Record<string, ProviderSettings>;
-  // Derived server-side from `providers` (kept for the manifest + legacy links)
-  catalogs: string[];
-  catalog: Provider[];
-  stream: Provider[];
-}
-
-export enum Prefix {
-  IMDB = "tt",
-  TMDB = "tmdb",
-  KISSKH = "kisskh",
-  OLE = "ole",
-}
 
 // The default selections: what the unconfigured manifest, a fresh config
 // page and a re-added provider start from. Tiers are optional on the config

@@ -8,14 +8,23 @@ type CacheValue = {
 
 export const TTL_SECS = {
   content: 24 * 60 * 60,
-  provider: 4 * 60 * 60,
   stream: 0.5 * 60 * 60,
+  // How long a "TMDB has no such title" verdict stands (search_miss rows)
+  miss: 7 * 24 * 60 * 60,
 };
 export const TTL_MS = {
   content: TTL_SECS.content * 1000,
-  provider: TTL_SECS.provider * 1000,
   stream: TTL_SECS.stream * 1000,
+  miss: TTL_SECS.miss * 1000,
 };
+
+/**
+ * Shared expiry test for the db-backed cache rows (stream, subtitle, search
+ * miss): a row is live until updatedAt + ttl. A missing ttl reads as
+ * expired so a row can't serve forever by accident.
+ */
+export const isExpired = (updatedAt: Date, ttl?: number | null): boolean =>
+  updatedAt.getTime() + (ttl ?? 0) < Date.now();
 
 const logger = new Logger("CACHE");
 class GlobalCache {

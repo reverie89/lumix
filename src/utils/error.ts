@@ -1,70 +1,5 @@
 import { Logger } from "./logger.js";
 
-export class RateLimitError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.RATE_LIMIT;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-
-export class TmdbError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.TMDB;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-export class FuseError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.FUSE;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-
-export class MatchingError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.MATCHING;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-
-// KISSKH
-
-export class KisskhDetailError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.KISSKH_DETAIL;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-export class KisskhEpisodeError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.KISSKH_EPISODE;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-export class KisskhTokenError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.KISSKH_TOKEN;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-
-// OLE
-
-export class OleDetailError extends Error {
-  constructor(message: string) {
-    const name = ErrorName.OLE_DETAIL;
-    super(`${name} | ${message}`);
-    this.name = name;
-  }
-}
-
 enum ErrorName {
   ERROR = "Error",
   RATE_LIMIT = "[RATELIMIT]",
@@ -84,6 +19,25 @@ enum ErrorName {
   // OLE
   OLE_DETAIL = "[OLE] Detail Error",
 }
+
+// Channel-tagged errors: each class prefixes its ErrorName to the message so
+// log lines carry the tag, and handleError/catch sites branch on instanceof.
+const namedError = (name: string) =>
+  class extends Error {
+    constructor(message: string) {
+      super(`${name} | ${message}`);
+      this.name = name;
+    }
+  };
+
+export const RateLimitError = namedError(ErrorName.RATE_LIMIT);
+export const TmdbError = namedError(ErrorName.TMDB);
+export const FuseError = namedError(ErrorName.FUSE);
+export const MatchingError = namedError(ErrorName.MATCHING);
+export const KisskhDetailError = namedError(ErrorName.KISSKH_DETAIL);
+export const KisskhEpisodeError = namedError(ErrorName.KISSKH_EPISODE);
+export const KisskhTokenError = namedError(ErrorName.KISSKH_TOKEN);
+export const OleDetailError = namedError(ErrorName.OLE_DETAIL);
 
 export function handleError(
   error: Error | any,

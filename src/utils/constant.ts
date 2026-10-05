@@ -9,6 +9,16 @@ export const RATE_LIMIT_DESCRIPTION = `Rate limit\nRetry after a few seconds`;
 export const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64; rv:156.0) Gecko/20100101 Firefox/156.0";
 
+// Browser-ish headers shared by every outbound JSON client; each client adds
+// its own User-Agent (and any deltas) on top.
+export const BROWSER_HEADERS: Record<string, string> = {
+  Accept: "application/json",
+  "Accept-Language": "en-US,en;q=0.5",
+  "Accept-Encoding": "gzip, deflate",
+  Connection: "keep-alive",
+  "Upgrade-Insecure-Requests": "1",
+};
+
 // kisskh serves subtitles and HLS streams from its own CDN rather than the
 // mirrors (sub.cdnvideo11.shop, hlsNN.cdnvideo11.shop)
 export const KISSKH_CDN_DOMAIN = "cdnvideo11.shop";
@@ -26,8 +36,8 @@ export const KISSKH_DEFAULT_MIRRORS = ENV.KISSKH_MIRRORS.filter(isMirrorUrl);
 export const MIRROR_FAIL_TTL_MS = 10 * 60 * 1000;
 
 // ole (欧乐) serves everything through one JSON API host (OLE_HOSTS
-// in .env). Kept configurable like the kisskh mirrors so a rotated host can
-// be added from the config page.
+// Kept configurable like the kisskh mirrors so a rotated host can be added
+// from the config page.
 export const OLE_DEFAULT_MIRRORS = ENV.OLE_HOSTS.filter(isMirrorUrl);
 
 // 中文 display labels for tier options. kisskh and ole share one English

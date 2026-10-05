@@ -85,6 +85,21 @@ export function parseOrigin(url: string) {
 }
 
 /**
+ * Upstream year fields degrade to the current year: kisskh carries a
+ * release date (pass `new Date(date).getFullYear()`), ole a bare year
+ * string, TMDB an ISO `first_air_date`/`release_date` that is empty or
+ * null for unreleased titles — all may be missing or unparseable.
+ */
+export function safeYear(
+  value: string | number | null | undefined,
+): number {
+  const parsed = typeof value === "number" ? value : parseInt(value ?? "");
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : new Date().getFullYear();
+}
+
+/**
  * for the axios client selection (utils/axios.ts) and the subtitle proxy
  * allowlist (kisskh-catalogs.ts); never validates user mirrors (a mirror
  * is any http(s) URL, see isMirrorUrl).

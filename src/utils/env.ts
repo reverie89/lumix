@@ -76,8 +76,8 @@ const envSchema = z.object({
 });
 
 // A var left bare in .env parses as the empty string; treat that as unset so
-// defaults apply instead of coercing (PORT= became 0, MATCH_IGNORES= crashed
-// JSON.parse, and boolean flags read "false" as true).
+// defaults apply — coercing "" would yield 0 for numbers, a JSON.parse
+// crash, and true for boolean flags.
 const cleaned = Object.fromEntries(
   Object.entries(process.env).map(([key, value]) => [
     key,
@@ -94,5 +94,7 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+// Exported for env.test.ts: AGENTS.md requires new FLAG=false-style vars to
+// use this strict parser, so its contract stays pinned directly.
 export { booleanFlag };
 export const ENV = parsed.data;
