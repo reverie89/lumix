@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Logger } from "./logger.js";
 
 // Strict boolean: only true/false/1/0 flip the value — unlike coerce.boolean,
 // which treats any non-empty string (including "false") as true.
@@ -87,7 +88,9 @@ const cleaned = Object.fromEntries(
 const parsed = envSchema.safeParse(cleaned);
 
 if (!parsed.success) {
-  console.error(`Invalid .env`, z.treeifyError(parsed.error).properties);
+  new Logger("ENV").error(
+    `Invalid .env | ${JSON.stringify(z.treeifyError(parsed.error).properties)}`,
+  );
   process.exit(1);
 }
 

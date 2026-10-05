@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - language selector (English / 中文) — localizes the config page, catalog names and the manifest description; TMDB detail fetches switch to zh-CN
+- local-time `[YYYY-MM-DD HH:mm:ss]` timestamps on log lines
 
 ### Changed
 

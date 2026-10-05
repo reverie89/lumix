@@ -36,6 +36,9 @@ services:
     ports:
       - 55913:55913
     environment: # more info in .env.example
+      ## Timezone for log timestamps (IANA name); a bare container defaults to UTC
+      # - TZ=Asia/Shanghai
+
       # Provider sources — the addon runs without them, but end users get nothing
       # to watch until these hold working values
       ## kisskh mirrors served to the config page and used when a config carries no mirrors (comma-separated http(s) URLs, tried in order) | none
