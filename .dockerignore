@@ -47,6 +47,15 @@ pids/
 README.md
 CHANGELOG.md
 LICENSE
+AGENTS.md
+
+# Regenerated in-image by the builder stage; never needed from the context
+dist/
+
+# Repo tooling, not part of any image build
+script/
+.hurl/
+.github/
 
 # Exclude Docker files
 Dockerfile*
