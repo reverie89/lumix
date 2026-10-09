@@ -51,15 +51,16 @@ const envSchema = z.object({
   RETRY_JITTER_MS: z.coerce.number().min(0).default(500),
   // Cache warming
   WARM_CACHE: booleanFlag(true),
-  // Rate limit
+  // Rate limit. Catalog counts per provider per IP (each provider's boards
+  // scroll independently); the rest are per IP
   CATALOG_WINDOW_MINUTES: z.coerce.number().min(1).default(10),
-  CATALOG_REQUEST_LIMIT: z.coerce.number().min(1).default(20),
+  CATALOG_REQUEST_LIMIT: z.coerce.number().min(1).default(200),
   META_WINDOW_MINUTES: z.coerce.number().min(1).default(10),
-  META_REQUEST_LIMIT: z.coerce.number().min(1).default(20),
+  META_REQUEST_LIMIT: z.coerce.number().min(1).default(60),
   STREAM_WINDOW_MINUTES: z.coerce.number().min(1).default(10),
-  STREAM_REQUEST_LIMIT: z.coerce.number().min(1).default(10),
+  STREAM_REQUEST_LIMIT: z.coerce.number().min(1).default(40),
   SUBTITLES_WINDOW_MINUTES: z.coerce.number().min(1).default(10),
-  SUBTITLES_REQUEST_LIMIT: z.coerce.number().min(1).default(10),
+  SUBTITLES_REQUEST_LIMIT: z.coerce.number().min(1).default(30),
   // VTT proxy fetches per IP in the subtitles window; every rendered track
   // request counts, so this rides a wider budget than the list endpoint
   SUBTITLES_PROXY_REQUEST_LIMIT: z.coerce.number().min(1).default(60),

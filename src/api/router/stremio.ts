@@ -64,6 +64,25 @@ function getRetryAfterText(remaining: number) {
   }
 }
 const getName = () => `⏱️${SHORT_NAME}\nRate Limit`;
+
+// Catalog requests are provider-scoped by id ("kisskh.series.Korean"), so the
+// catalog budget splits per provider per IP — scrolling one provider's boards
+// can't starve the other. Meta/stream/subtitles stay one budget per IP:
+// imdb/tmdb ids resolve against both providers in a single request. Config
+// segments are base64url (no dots), so "<provider>." only matches catalog ids.
+const providerIdPrefix = new RegExp(
+  `(${Object.values(Provider).join("|")})\\.`,
+);
+export const limiterKey = (
+  resource: ShortManifestResource,
+  ip: string,
+  path: string,
+): string => {
+  if (resource !== "catalog") return ip;
+  const provider = providerIdPrefix.exec(path)?.[1];
+  return provider ? `${ip}:${provider}` : ip;
+};
+
 const getLimiter = (
   resource: ShortManifestResource,
   windowMs: number = 30 * 60 * 1000,
@@ -75,8 +94,7 @@ const getLimiter = (
       limit: limit,
       keyGenerator: (c) => {
         const { ip } = extractHeaderInfo(c);
-        const key = `${ip}`;
-        return key;
+        return limiterKey(resource, ip, c.req.path);
       },
       handler: (c) => {
         const { ip } = extractHeaderInfo(c);

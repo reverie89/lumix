@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.1] - 2026-10-09
 
 ### Added
 
@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TMDB matches persist across restarts — content mappings link once, refresh on remap and never unlink; NaN years and missing posters are handled; shared stream logic moves into the base provider
 - provider mirror defaults are a deployment setting — `KISSKH_MIRRORS` / `OLE_HOSTS` env vars feed the config page and the no-mirrors fallback instead of bundled lists
 - duplicate mirror picks collapse (case- and trailing-slash-insensitive, first occurrence wins) on the config page and in config normalization
+- rate limits raised — catalog 200 / meta 60 / stream 40 / subtitles 30 per 10-minute window, and the catalog budget is counted per provider per IP so one provider's board scrolling doesn't starve the other's
+
 ## [0.2.0] - 2026-10-04
 
 ### Added
@@ -44,6 +46,7 @@ Initial release of **lumix** — a Stremio addon that streams dramas, series and
 - Docker deployment — Dockerfile, docker-compose.yaml and a CI workflow publishing the image to ghcr.io; the server always listens on port 55913
 
 
-[unreleased]: https://github.com/reverie89/lumix/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/reverie89/lumix/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/reverie89/lumix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/reverie89/lumix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/reverie89/lumix/releases/tag/v0.1.0
