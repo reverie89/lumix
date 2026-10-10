@@ -1,6 +1,6 @@
 {
   "name": "lumix",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Stream dramas, series and movies",
   "scripts": {
     "start": "node --env-file=.env dist/server.js",
@@ -19,10 +19,10 @@
     "node": "^26.0.0"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.17",
+    "@hono/node-server": "^2.1.4",
     "@stremio-addon/sdk": "^1.1.0",
     "axios": "^1.20.0",
-    "better-sqlite3": "^12.4.1",
+    "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "drizzle-orm": "^1.0.0-rc.5-ab785fc",
     "fuse.js": "^7.5.0",
@@ -33,11 +33,11 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.0.0",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.7",
     "drizzle-kit": "^1.0.0-rc.5-ab785fc",
-    "typescript": "^6.0.3",
-    "vitest": "^3.2.7"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - the built-in default selects all three providers — kisskh, 欧乐 and 爱壹帆 — with slimmer picks; the unconfigured manifest, a fresh config page and malformed-config fallback all start from this selection
 - kisskh series/movie rows are type-verified against TMDB — confidently mislabeled titles drop out, unsure ones keep the upstream guess
 - the docker runtime image shrinks to bare alpine + the node binary
+- dependencies bumped to current majors — @hono/node-server 2, better-sqlite3 13, dotenv 18, typescript 7, vitest 5; drizzle stays on the 1.0 release candidate
 
 ### Fixed
 

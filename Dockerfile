@@ -2,13 +2,16 @@ FROM node:26-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# --ignore-scripts: better-sqlite3 ships its prebuilds in the tarball, but its
+# bundled binding.gyp makes npm attempt a source build (no toolchain here).
+# No runtime dependency needs an install script; prebuilds load at require.
+RUN npm ci --omit=dev --ignore-scripts
 
 FROM node:26-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
