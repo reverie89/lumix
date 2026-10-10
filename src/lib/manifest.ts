@@ -45,8 +45,8 @@ const defaultKisskhSettings: KisskhSettings = {
   mirrors: [],
   // Update rows first — freshest content on top in Stremio
   order: ["update", "type", "region", "status"],
-  type: ["TVSeries", "Movies", "Hollywood"],
-  region: ["Korean", "Chinese", "Japanese", "Hongkong", "US"],
+  type: ["TVSeries", "Movies"],
+  region: ["Korean", "Chinese", "US"],
   status: [],
   update: ["Last Update"],
 };
@@ -55,7 +55,7 @@ const defaultOleSettings: OleSettings = {
   mirrors: [],
   order: ["type", "region", "update"],
   type: ["TVSeries", "Movies", "Variety", "ShortDrama"],
-  region: ["Chinese", "Hongkong", "Taiwanese", "Japanese", "Korean", "US"],
+  region: ["Chinese", "Hongkong", "US"],
   update: [],
 };
 
@@ -63,18 +63,15 @@ const defaultIyfSettings: IyfSettings = {
   mirrors: [],
   order: ["type", "region", "year", "quality", "sort"],
   type: ["TVSeries", "Movies"],
-  region: ["Chinese", "Hongkong", "Taiwanese", "Japanese", "Korean"],
+  region: ["Chinese", "Hongkong"],
   year: [],
   quality: [],
   sort: [],
 };
 
-// kisskh first, then 欧乐 — the same shape normalizeConfig produces for a
-// decoded config carrying both providers (hidden search rows close each
-// provider's block). iyf's settings ride along so a fresh config page and a
-// re-added iyf provider seed from them, but iyf stays OUT of the default
-// catalog/stream lists: it is opt-in until the user adds it on the page, so
-// the unconfigured manifest (and default traffic) never scrape it.
+// kisskh, then 欧乐, then 爱壹帆 — the same shape normalizeConfig produces
+// for a decoded config carrying all three providers (hidden search rows
+// close each provider's block).
 export const defaultConfig: UserConfig = {
   language: "en",
   providers: {
@@ -87,9 +84,11 @@ export const defaultConfig: UserConfig = {
     ...KISSKH_HIDDEN_CATALOGS,
     ...expandOleCatalogs(defaultOleSettings),
     ...OLE_HIDDEN_CATALOGS,
+    ...expandIyfCatalogs(defaultIyfSettings),
+    ...IYF_HIDDEN_CATALOGS,
   ],
-  catalog: [Provider.KISSKH, Provider.OLE],
-  stream: [Provider.KISSKH, Provider.OLE],
+  catalog: [Provider.KISSKH, Provider.OLE, Provider.IYF],
+  stream: [Provider.KISSKH, Provider.OLE, Provider.IYF],
 };
 
 // Catalog display name per language: `[L/kisskh] Korean` / `[L/欧乐] 大陆`.

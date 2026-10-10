@@ -101,9 +101,9 @@ Run the smallest relevant verification set before finishing a change:
   tests).
 - For HTTP-facing changes, run the server with a scratch env (set
   `TMDB_API_KEY` only when testing the TMDB path) and check: `/manifest.json`
-  lists the expected catalogs (default: kisskh then 欧乐); a config-scoped
-  `/catalog/...` returns metas for each enabled provider; a legacy
-  (old-format) config link still resolves its kisskh catalogs.
+  lists the expected catalogs (default: kisskh, 欧乐, then 爱壹帆); a
+  config-scoped `/catalog/...` returns metas for each enabled provider; a
+  legacy (old-format) config link still resolves its kisskh catalogs.
 - Grep for identifiers you meant to purge — expect zero hits outside
   history.
 

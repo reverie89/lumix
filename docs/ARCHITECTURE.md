@@ -44,17 +44,17 @@ provider's categories: tier option lists, the canonical tier order
 `get*Query` (catalog name → upstream API query). Option names are shared
 where the concept is shared (Korean, TVSeries, Update…; iyf's Popular/Score
 reuse ole's update names, while its Latest is add-time ordering — a
-different concept from ole's Last Update, so it keeps its own name);
-each catalogs file maps the names to its own upstream API values. A
-category change touches the catalogs file, the `TIER_OPTIONS` table in
+different concept from ole's Last Update, so it keeps its own name); each
+catalogs file maps the names to its own upstream API values. A category
+change touches the catalogs file, the `TIER_OPTIONS` table in
 `public/js/landing.js`, and the zh label tables (`TIER_LABELS_ZH` in
-`src/utils/constant.ts`, `OPTION_LABELS_ZH` in `landing.js`) — nothing
-else. The `*-catalogs.test.ts` files pin the row-expansion rules.
+`src/utils/constant.ts`, `OPTION_LABELS_ZH` in `landing.js`) — nothing else.
+The `*-catalogs.test.ts` files pin the row-expansion rules.
 
 Tier picks default to the explicit sets in `src/lib/manifest.ts`
-`defaultKisskhSettings` / `defaultOleSettings` / `defaultIyfSettings`
-(the unconfigured manifest, a fresh page and a re-added provider all start
-from them); `__all__` remains a valid pick that the normalizers expand
+`defaultKisskhSettings` / `defaultOleSettings` / `defaultIyfSettings` (the
+unconfigured manifest, a fresh page and a re-added provider all start from
+them); `__all__` remains a valid pick that the normalizers expand
 server-side to every option of the tier.
 
 ## kisskh mislabels types
@@ -72,22 +72,22 @@ defaults off; ole/iyf rows are already type-filtered upstream.
 ## Hosts and subtitles
 
 `isKisskhHost` (`src/utils/format.ts`, second-level label rule) classifies
-hosts for the axios client selection (`src/utils/axios.ts`:
-kisskh-domain mirrors get the no-redirect client; ole and iyf hosts use
-the default client) — it does not validate user mirrors (`isMirrorUrl`, same
-file: a mirror is any http(s) URL). Subtitles are separate:
+hosts for the axios client selection (`src/utils/axios.ts`: kisskh-domain
+mirrors get the no-redirect client; ole and iyf hosts use the default
+client) — it does not validate user mirrors (`isMirrorUrl`, same file: a
+mirror is any http(s) URL). Subtitles are separate:
 `isSubtitleSourceHost` (`kisskh-catalogs.ts`) owns the static `/subtitle`
 allowlist, its tests pin the tricky cases (`cdnvideo11.shop.evil.com` must
 not pass), and other-host origins are admitted at runtime via the
-seen-subtitle-origin registry in `kisskh.ts`. ole and iyf serve no
-subtitle files (subs are hardcoded into the stream upstream) — their
-`getSubtitles` return `[]`.
+seen-subtitle-origin registry in `kisskh.ts`. ole and iyf serve no subtitle
+files (subs are hardcoded into the stream upstream) — their `getSubtitles`
+return `[]`.
 
 ## Mirrors
 
-kisskh has no single canonical domain; ole's picks are its API hosts
-(not web mirrors); an iyf pick names a host family root or one of its
-subdomains — `iyfFamily` in `src/source/iyf.ts` derives the
+kisskh has no single canonical domain; ole's picks are its API hosts (not
+web mirrors); an iyf pick names a host family root or one of its subdomains
+— `iyfFamily` in `src/source/iyf.ts` derives the
 m10./rankv21./static./www. spellings. Mirror defaults are a deployment
 setting: `KISSKH_MIRRORS` / `OLE_HOSTS` / `IYF_HOSTS` in env, filtered
 through `isMirrorUrl` into the `*_DEFAULT_MIRRORS` of

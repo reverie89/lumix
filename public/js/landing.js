@@ -448,9 +448,9 @@ const DEFAULT_MIRRORS = {
   ),
   iyf: JSON.parse(document.getElementById("iyfDefaultMirrors").textContent),
 };
-// kisskh and 欧乐 start on a fresh page; 爱壹帆 is opt-in — its chip adds it,
-// the ✕ and the chip remove and re-add it
-const FRESH_ENABLED = { kisskh: true, ole: true, iyf: false };
+// all three providers start enabled on a fresh page (kisskh, 欧乐, 爱壹帆);
+// the ✕ and the chips remove and re-add each one
+const FRESH_ENABLED = { kisskh: true, ole: true, iyf: true };
 
 function el(tag, className) {
   const node = document.createElement(tag);

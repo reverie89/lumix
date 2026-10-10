@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Provider } from "../../utils/config.js";
 import { defaultConfig } from "../../lib/manifest.js";
 import {
+  IYF_DEFAULT_MIRRORS,
   KISSKH_DEFAULT_MIRRORS,
   OLE_DEFAULT_MIRRORS,
 } from "../../utils/constant.js";
@@ -215,13 +216,22 @@ describe("decodeConfig", () => {
 
   it("falls back to the default config on malformed input", () => {
     const fallback = decodeConfig("not-json-at-all");
-    expect(fallback.catalog).toEqual([Provider.KISSKH, Provider.OLE]);
+    expect(fallback.catalog).toEqual([
+      Provider.KISSKH,
+      Provider.OLE,
+      Provider.IYF,
+    ]);
     expect(fallback.catalogs.length).toBeGreaterThan(0);
     // Valid JSON of the wrong shape falls back to the default catalogs
     const wrongShape = decodeConfig(encode("just a string"));
     expect(wrongShape.providers.kisskh).toBeDefined();
     expect(wrongShape.providers.ole).toBeDefined();
-    expect(wrongShape.catalog).toEqual([Provider.KISSKH, Provider.OLE]);
+    expect(wrongShape.providers.iyf).toBeDefined();
+    expect(wrongShape.catalog).toEqual([
+      Provider.KISSKH,
+      Provider.OLE,
+      Provider.IYF,
+    ]);
     // Deeply nested JSON that crashes JSON.parse is caught like any other
     let deep: Record<string, unknown> = { value: 1 };
     for (let i = 0; i < 100000; i++) deep = { nested: deep };
@@ -237,13 +247,13 @@ describe("decodeConfig", () => {
     // injects them into the page), so the link and the constants cannot drift.
     const savedLink = {
       language: "en",
-      order: ["kisskh", "ole"],
+      order: ["kisskh", "ole", "iyf"],
       providers: {
         kisskh: {
           mirrors: KISSKH_DEFAULT_MIRRORS,
           order: ["update", "type", "region", "status"],
-          type: ["TVSeries", "Movies", "Hollywood"],
-          region: ["Korean", "Chinese", "Japanese", "Hongkong", "US"],
+          type: ["TVSeries", "Movies"],
+          region: ["Korean", "Chinese", "US"],
           status: [],
           update: ["Last Update"],
         },
@@ -251,8 +261,17 @@ describe("decodeConfig", () => {
           mirrors: OLE_DEFAULT_MIRRORS,
           order: ["type", "region", "update"],
           type: ["TVSeries", "Movies", "Variety", "ShortDrama"],
-          region: ["Chinese", "Hongkong", "Taiwanese", "Japanese", "Korean", "US"],
+          region: ["Chinese", "Hongkong", "US"],
           update: [],
+        },
+        iyf: {
+          mirrors: IYF_DEFAULT_MIRRORS,
+          order: ["type", "region", "year", "quality", "sort"],
+          type: ["TVSeries", "Movies"],
+          region: ["Chinese", "Hongkong"],
+          year: [],
+          quality: [],
+          sort: [],
         },
       },
     };
@@ -269,6 +288,10 @@ describe("decodeConfig", () => {
     expect(config.providers.ole).toEqual({
       ...defaultConfig.providers.ole,
       mirrors: OLE_DEFAULT_MIRRORS,
+    });
+    expect(config.providers.iyf).toEqual({
+      ...defaultConfig.providers.iyf,
+      mirrors: IYF_DEFAULT_MIRRORS,
     });
   });
 

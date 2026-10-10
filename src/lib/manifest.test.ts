@@ -31,14 +31,8 @@ describe("defaultConfig", () => {
     const kisskh = defaultConfig.providers.kisskh as KisskhSettings;
     expect(kisskh.order).toEqual(["update", "type", "region", "status"]);
     expect(kisskh.update).toEqual(["Last Update"]);
-    expect(kisskh.type).toEqual(["TVSeries", "Movies", "Hollywood"]);
-    expect(kisskh.region).toEqual([
-      "Korean",
-      "Chinese",
-      "Japanese",
-      "Hongkong",
-      "US",
-    ]);
+    expect(kisskh.type).toEqual(["TVSeries", "Movies"]);
+    expect(kisskh.region).toEqual(["Korean", "Chinese", "US"]);
     // status defaults to none — no Ongoing/Completed rows anywhere
     expect(kisskh.status).toEqual([]);
   });
@@ -47,57 +41,47 @@ describe("defaultConfig", () => {
     const ole = defaultConfig.providers.ole as OleSettings;
     expect(ole.order).toEqual(["type", "region", "update"]);
     expect(ole.type).toEqual(["TVSeries", "Movies", "Variety", "ShortDrama"]);
-    expect(ole.region).toEqual([
-      "Chinese",
-      "Hongkong",
-      "Taiwanese",
-      "Japanese",
-      "Korean",
-      "US",
-    ]);
+    expect(ole.region).toEqual(["Chinese", "Hongkong", "US"]);
     // update defaults to none — no Popular/Score rows anywhere
     expect(ole.update).toEqual([]);
   });
 
-  it("keeps iyf opt-in: seeded settings, no default catalog rows", () => {
+  it("pins the default iyf tiers — enabled alongside kisskh and ole", () => {
     const iyf = defaultConfig.providers.iyf as IyfSettings;
     expect(iyf.order).toEqual(["type", "region", "year", "quality", "sort"]);
     expect(iyf.type).toEqual(["TVSeries", "Movies"]);
-    expect(iyf.region).toEqual([
-      "Chinese",
-      "Hongkong",
-      "Taiwanese",
-      "Japanese",
-      "Korean",
-    ]);
+    expect(iyf.region).toEqual(["Chinese", "Hongkong"]);
+    // year/quality/sort default to none — no bucket or ranking rows
     expect(iyf.year).toEqual([]);
     expect(iyf.quality).toEqual([]);
     expect(iyf.sort).toEqual([]);
-    // Not enabled until the user adds it on the page: the unconfigured
-    // manifest and default traffic never scrape iyf
-    expect(defaultConfig.catalog).not.toContain(Provider.IYF);
-    expect(defaultConfig.stream).not.toContain(Provider.IYF);
+    // Third in line after kisskh and 欧乐: the unconfigured manifest and
+    // default traffic scrape it too
+    expect(defaultConfig.catalog).toEqual([
+      Provider.KISSKH,
+      Provider.OLE,
+      Provider.IYF,
+    ]);
+    expect(defaultConfig.stream).toEqual([
+      Provider.KISSKH,
+      Provider.OLE,
+      Provider.IYF,
+    ]);
     expect(
       defaultConfig.catalogs.some((id) => id.startsWith("iyf.")),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("expands the default tiers with no status rows, update rows first, kisskh before ole", () => {
+  it("expands the default tiers with no status or year rows, update rows first, kisskh then ole then iyf", () => {
     expect(defaultConfig.catalogs).toEqual([
       "kisskh.series.Last Update",
       "kisskh.movie.Last Update",
       "kisskh.series.TVSeries",
       "kisskh.movie.Movies",
-      "kisskh.series.Hollywood",
-      "kisskh.movie.Hollywood",
       "kisskh.series.Korean",
       "kisskh.movie.Korean",
       "kisskh.series.Chinese",
       "kisskh.movie.Chinese",
-      "kisskh.series.Japanese",
-      "kisskh.movie.Japanese",
-      "kisskh.series.Hongkong",
-      "kisskh.movie.Hongkong",
       "kisskh.series.US",
       "kisskh.movie.US",
       ...KISSKH_HIDDEN_CATALOGS,
@@ -109,15 +93,16 @@ describe("defaultConfig", () => {
       "ole.movie.Chinese",
       "ole.series.Hongkong",
       "ole.movie.Hongkong",
-      "ole.series.Taiwanese",
-      "ole.movie.Taiwanese",
-      "ole.series.Japanese",
-      "ole.movie.Japanese",
-      "ole.series.Korean",
-      "ole.movie.Korean",
       "ole.series.US",
       "ole.movie.US",
       ...OLE_HIDDEN_CATALOGS,
+      "iyf.series.TVSeries",
+      "iyf.movie.Movies",
+      "iyf.series.Chinese",
+      "iyf.movie.Chinese",
+      "iyf.series.Hongkong",
+      "iyf.movie.Hongkong",
+      ...IYF_HIDDEN_CATALOGS,
     ]);
   });
 
