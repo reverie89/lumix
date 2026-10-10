@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- kisskh series/movie rows are type-verified against TMDB — confidently mislabeled titles drop out, unsure ones keep the upstream guess
 - the docker runtime image shrinks to bare alpine + the node binary
 
 ### Fixed

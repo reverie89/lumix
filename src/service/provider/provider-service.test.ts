@@ -41,6 +41,7 @@ vi.mock("../../db/queries.js", async (importOriginal) => {
 });
 
 const searchDetail = vi.spyOn(tmdb, "searchDetail");
+const verifyType = vi.spyOn(tmdb, "verifyType");
 
 beforeEach(() => {
   dbGet.mockReset();
@@ -49,6 +50,9 @@ beforeEach(() => {
   dbGetProviderContent.mockReset();
   dbUpsertProviderContent.mockReset();
   searchDetail.mockReset();
+  searchDetail.mockResolvedValue(null);
+  verifyType.mockReset();
+  verifyType.mockResolvedValue(null);
   tmdbEnabled.mockReturnValue(true);
 });
 
@@ -61,10 +65,18 @@ const tmdbDetail = {
   thumbnail: "https://img/tmdb.jpg",
 } as ContentDetail;
 
+const movieDetail = {
+  id: "555",
+  tmdbId: 555,
+  title: "TMDB Movie",
+  year: 2023,
+  type: "movie",
+  thumbnail: "https://img/movie.jpg",
+} as ContentDetail;
+
 describe("resolveProviderPoster", () => {
   it("serves stored art for a linked provider id without searching TMDB", async () => {
-    dbGet.mockResolvedValue({ poster: "https://img/tmdb.jpg" });
-    searchDetail.mockResolvedValue(null);
+    dbGet.mockResolvedValue({ poster: "https://img/tmdb.jpg", type: "series" });
     const result = await ProviderService.resolveProviderPoster(
       Provider.KISSKH,
       11923,
@@ -75,6 +87,7 @@ describe("resolveProviderPoster", () => {
     expect(result).toEqual({
       poster: "https://img/tmdb.jpg",
       detail: null,
+      verifiedType: "series",
     });
     expect(searchDetail).not.toHaveBeenCalled();
     expect(dbGet).toHaveBeenCalledWith("kisskh:11923");
@@ -93,7 +106,11 @@ describe("resolveProviderPoster", () => {
       "https://img/ole.jpg",
       "series",
     );
-    expect(result).toEqual({ poster: "https://img/tmdb.jpg", detail: tmdbDetail });
+    expect(result).toEqual({
+      poster: "https://img/tmdb.jpg",
+      detail: tmdbDetail,
+      verifiedType: null,
+    });
     expect(searchDetail).toHaveBeenCalledWith("New Title", "series");
     expect(dbGet).toHaveBeenCalledWith("ole:42");
     expect(dbUpsertContent).toHaveBeenCalledWith(expect.any(String), tmdbDetail);
@@ -123,7 +140,11 @@ describe("resolveProviderPoster", () => {
       "https://img/kisskh.jpg",
       "series",
     );
-    expect(result).toEqual({ poster: "https://img/tmdb.jpg", detail: tmdbDetail });
+    expect(result).toEqual({
+      poster: "https://img/tmdb.jpg",
+      detail: tmdbDetail,
+      verifiedType: null,
+    });
     expect(dbUpsertContent).toHaveBeenCalledWith("content-77", tmdbDetail);
     expect(dbUpsertProviderContent).toHaveBeenCalledWith({
       id: "kisskh:7",
@@ -192,7 +213,7 @@ describe("resolveProviderPoster", () => {
   });
 
   it("falls back to the provider image when the linked row has no poster", async () => {
-    dbGet.mockResolvedValue({ poster: null });
+    dbGet.mockResolvedValue({ poster: null, type: "series" });
     const result = await ProviderService.resolveProviderPoster(
       Provider.KISSKH,
       7,
@@ -203,6 +224,7 @@ describe("resolveProviderPoster", () => {
     expect(result).toEqual({
       poster: "https://img/kisskh.jpg",
       detail: null,
+      verifiedType: "series",
     });
     expect(searchDetail).not.toHaveBeenCalled();
   });
@@ -221,7 +243,126 @@ describe("resolveProviderPoster", () => {
     expect(result).toEqual({
       poster: "https://img/kisskh.jpg",
       detail: null,
+      verifiedType: null,
     });
+  });
+});
+
+describe("resolveProviderPoster type verification", () => {
+  it("searches and persists against the verified surface, not the claimed one", async () => {
+    dbGet.mockResolvedValue(undefined);
+    dbGetByTmdb.mockResolvedValue(undefined);
+    dbUpsertContent.mockResolvedValue("content-1");
+    dbGetProviderContent.mockResolvedValue(undefined);
+    verifyType.mockResolvedValue("movie");
+    searchDetail.mockResolvedValue(movieDetail);
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
+      12,
+      "Mislabeled Title",
+      "https://img/kisskh.jpg",
+      "series",
+      undefined,
+      true,
+    );
+    expect(result).toEqual({
+      poster: "https://img/movie.jpg",
+      detail: movieDetail,
+      verifiedType: "movie",
+    });
+    expect(verifyType).toHaveBeenCalledWith("Mislabeled Title");
+    expect(searchDetail).toHaveBeenCalledWith("Mislabeled Title", "movie");
+    expect(dbUpsertProviderContent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "kisskh:12", contentId: "content-1" }),
+    );
+  });
+
+  it("keeps the claimed surface when the title is unverifiable", async () => {
+    dbGet.mockResolvedValue(undefined);
+    dbGetByTmdb.mockResolvedValue(undefined);
+    dbUpsertContent.mockResolvedValue("content-1");
+    dbGetProviderContent.mockResolvedValue(undefined);
+    searchDetail.mockResolvedValue(tmdbDetail);
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
+      13,
+      "Obscure Title",
+      "https://img/kisskh.jpg",
+      "series",
+      undefined,
+      true,
+    );
+    expect(result).toEqual({
+      poster: "https://img/tmdb.jpg",
+      detail: tmdbDetail,
+      verifiedType: null,
+    });
+    expect(searchDetail).toHaveBeenCalledWith("Obscure Title", "series");
+  });
+
+  it("agreement on a linked row short-circuits with no TMDB call", async () => {
+    dbGet.mockResolvedValue({ poster: "https://img/tmdb.jpg", type: "series" });
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
+      11923,
+      "Known Title",
+      "https://img/kisskh.jpg",
+      "series",
+      undefined,
+      true,
+    );
+    expect(result).toEqual({
+      poster: "https://img/tmdb.jpg",
+      detail: null,
+      verifiedType: "series",
+    });
+    expect(verifyType).not.toHaveBeenCalled();
+    expect(searchDetail).not.toHaveBeenCalled();
+  });
+
+  it("re-links a stored row whose type a fresh verdict contradicts", async () => {
+    dbGet.mockResolvedValue({ poster: "https://img/stale.jpg", type: "series" });
+    dbGetByTmdb.mockResolvedValue(undefined);
+    dbUpsertContent.mockResolvedValue("content-2");
+    dbGetProviderContent.mockResolvedValue(undefined);
+    verifyType.mockResolvedValue("movie");
+    searchDetail.mockResolvedValue(movieDetail);
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
+      14,
+      "Wrongly Linked Title",
+      "https://img/kisskh.jpg",
+      "movie",
+      undefined,
+      true,
+    );
+    expect(result).toEqual({
+      poster: "https://img/movie.jpg",
+      detail: movieDetail,
+      verifiedType: "movie",
+    });
+    expect(dbUpsertProviderContent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "kisskh:14", contentId: "content-2" }),
+    );
+  });
+
+  it("trusts a linked row when TMDB cannot contradict it", async () => {
+    dbGet.mockResolvedValue({ poster: "https://img/db.jpg", type: "movie" });
+    const result = await ProviderService.resolveProviderPoster(
+      Provider.KISSKH,
+      15,
+      "Unverifiable But Linked",
+      "https://img/kisskh.jpg",
+      "series",
+      undefined,
+      true,
+    );
+    expect(result).toEqual({
+      poster: "https://img/db.jpg",
+      detail: null,
+      verifiedType: "movie",
+    });
+    expect(searchDetail).not.toHaveBeenCalled();
   });
 });
 

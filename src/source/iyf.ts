@@ -263,7 +263,7 @@ export class IyfScraper extends BaseProvider {
           this.imageUrl(item.image ?? item.imgPath, config),
         ),
       ),
-    );
+    ).then((previews) => previews.map(({ meta }) => meta));
   }
 
   /**
@@ -299,7 +299,7 @@ export class IyfScraper extends BaseProvider {
         .map((item) =>
           this.toPreview({ id: item.key }, item.title, type, this.imageUrl(item.image, config)),
         ),
-    );
+    ).then((previews) => previews.map(({ meta }) => meta));
   }
 
   async getMeta(

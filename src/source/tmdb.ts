@@ -9,7 +9,7 @@ import { USER_AGENT } from "../utils/constant.js";
 import { ENV } from "../utils/env.js";
 import { handleError, FuseError, MatchingError, TmdbError } from "../utils/error.js";
 import { extractTitle, safeYear } from "../utils/format.js";
-import { matchTitle } from "../utils/fuse.js";
+import { bestMatch, matchTitle } from "../utils/fuse.js";
 import { Logger } from "../utils/logger.js";
 import { getProxyUrl } from "../utils/proxy/proxy.js";
 import { ContentDetail } from "./meta.js";
@@ -133,6 +133,26 @@ class TMDBService {
   // matchTitle, and resolved titles later drive the providers' own search
   // (streams resolve by title) — a localized title would break both. Only
   // the final id-based detail fetch localizes.
+
+  /**
+   * The normalized search query every surface must share: base title,
+   * season, and the year TMDB filters by (dropped for season > 1, where the
+   * year belongs to the parent show). One normalization keeps all surfaces'
+   * request URLs identical so the axios url-cache dedupes them.
+   */
+  private extractSearch(
+    search: string,
+    year?: number,
+  ): { title: string; season: number; year: number | undefined } {
+    const extracted = extractTitle(search);
+    const season = extracted.season || 1;
+    return {
+      title: extracted.title,
+      season,
+      year: season == 1 ? extracted.year || year : undefined,
+    };
+  }
+
   async searchDetail(
     search: string,
     type: ContentType,
@@ -140,14 +160,8 @@ class TMDBService {
     language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
     if (!isTmdbEnabled()) return null;
-    const extracted = extractTitle(search);
-    const season = extracted.season || 1;
-    const title = extracted.title;
-    if (season == 1) {
-      year = extracted.year || year;
-    } else {
-      year = undefined;
-    }
+    const { title, season, year: searchYear } = this.extractSearch(search, year);
+    year = searchYear;
     // Negative cache: the searchMiss table remembers titles TMDB failed to
     // match, so catalog re-renders (restarts included) skip them until the
     // miss expires instead of re-searching every one. matchTitle signals a
@@ -184,25 +198,93 @@ class TMDBService {
     });
   }
 
+  /**
+   * Verify a title's content type: search both surfaces and trust the side
+   * with the confident match — kisskh serves one mixed upstream list to its
+   * Hollywood series and movie rows and otherwise guesses from episode
+   * count. Null means TMDB is disabled or neither surface matched
+   * confidently; callers keep their claimed type. Per-surface negative-cache
+   * rows skip surfaces already known to have no match (see searchDetail).
+   */
+  async verifyType(search: string): Promise<"series" | "movie" | null> {
+    if (!isTmdbEnabled()) return null;
+    const { title, year } = this.extractSearch(search);
+    const [seriesMissed, movieMissed] = await Promise.all([
+      getSearchMiss(title, "series"),
+      getSearchMiss(title, "movie"),
+    ]);
+    if (seriesMissed && movieMissed) return null;
+    const surfaces: ("series" | "movie")[] = [];
+    if (!seriesMissed) surfaces.push("series");
+    if (!movieMissed) surfaces.push("movie");
+    const matches = (
+      await Promise.all(surfaces.map((type) => this.bestSurfaceMatch(title, year, type)))
+    ).filter((match): match is NonNullable<typeof match> => match !== null);
+    if (matches.length === 0) return null;
+    // Fuse score is a distance (lower is better); the token ratio breaks
+    // ties. A single match reduces to itself.
+    const best = matches.reduce((a, b) =>
+      a.fuseScore !== b.fuseScore
+        ? a.fuseScore < b.fuseScore
+          ? a
+          : b
+        : a.tokenScore >= b.tokenScore
+          ? a
+          : b,
+    );
+    return best.type;
+  }
+
+  /**
+   * One surface's confidence: the best match's scores, or null when the
+   * search matched nothing (FuseError/MatchingError — recorded as a miss) or
+   * failed transiently (logged, left retryable — see searchDetail).
+   */
+  private async bestSurfaceMatch(
+    title: string,
+    year: number | undefined,
+    type: "series" | "movie",
+  ): Promise<{ type: "series" | "movie"; fuseScore: number; tokenScore: number } | null> {
+    try {
+      const candidates =
+        type === "series"
+          ? (await this.getSearchSeries(title, year)).results.map((result) =>
+              this.toTvCandidate(result),
+            )
+          : this.getMovies((await this.getSearchMovie(title, year)).results);
+      const match = bestMatch(candidates, title, year);
+      return { type, fuseScore: match.fuseScore, tokenScore: match.tokenScore };
+    } catch (error: any) {
+      if (!(error instanceof FuseError) && !(error instanceof MatchingError)) {
+        handleError(error, this.logger, `Verify ${type}`);
+        return null;
+      }
+      await this.recordSearchMiss(title, type);
+      return null;
+    }
+  }
+
+  private toTvCandidate(result: TmdbTvResult): ContentDetail {
+    const search: ContentDetail = {
+      id: result.id.toString(),
+      title: result.name,
+      overview: result.overview,
+      year: safeYear(result.first_air_date),
+      type: "series",
+      tmdbId: result.id,
+    };
+    const thumbnail = this.image(result.poster_path);
+    if (thumbnail) search.thumbnail = thumbnail;
+    return search;
+  }
+
   private async searchSeriesDetail(
     title: string,
     year?: number,
     language?: TmdbLanguage,
   ): Promise<ContentDetail | null> {
     const response = await this.getSearchSeries(title, year);
-    const titles = response.results.map((result) => {
-      const search: ContentDetail = {
-        id: result.id.toString(),
-        title: result.name,
-        overview: result.overview,
-        year: safeYear(result.first_air_date),
-        type: "series",
-        tmdbId: result.id,
-      };
-      const thumbnail = this.image(result.poster_path);
-      if (thumbnail) search.thumbnail = thumbnail;
-      return search;
-    });
+    const titles = response.results.map((result) => this.toTvCandidate(result));
     const detail = matchTitle<ContentDetail>(titles, title, year);
     const tv = detail[0];
     if (tv) {

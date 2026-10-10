@@ -30,6 +30,9 @@ vi.mock("./tmdb.js", async (importOriginal) => {
 // dotenv loads the developer's .env, whose real key would send searchDetail
 // to the network — pin the poster search off so these tests stay offline
 const searchDetail = vi.spyOn(tmdb, "searchDetail");
+// The type gate consults verifyType per title; the spy decides verdicts
+// (null keeps the item) without touching isTmdbEnabled
+const verifyType = vi.spyOn(tmdb, "verifyType");
 
 // Raw List rows as upstream serves them: pre-premiere shows carry a
 // "Coming <date>" label, live ones a blank/whitespace one (or none)
@@ -97,6 +100,8 @@ beforeEach(() => {
   tmdbEnabled.mockReturnValue(false);
   searchDetail.mockReset();
   searchDetail.mockResolvedValue(null);
+  verifyType.mockReset();
+  verifyType.mockResolvedValue(null);
 });
 
 describe("getCatalog", () => {
@@ -122,6 +127,52 @@ describe("getCatalog", () => {
   });
 });
 
+describe("getCatalog type gate", () => {
+  it("drops items whose TMDB-verified type contradicts the row, keeps unsure ones", async () => {
+    axiosGet.mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          title: "Agreeing Drama",
+          episodesCount: 16,
+          thumbnail: "https://img/a.jpg",
+          label: "",
+        },
+        {
+          id: 2,
+          title: "Secretly a Movie",
+          episodesCount: 3,
+          thumbnail: "https://img/b.jpg",
+          label: "",
+        },
+        {
+          id: 3,
+          title: "Unknown to TMDB",
+          episodesCount: 8,
+          thumbnail: "https://img/c.jpg",
+          label: "",
+        },
+      ],
+    });
+    verifyType.mockImplementation(async (title: string) =>
+      title === "Secretly a Movie"
+        ? "movie"
+        : title === "Agreeing Drama"
+          ? "series"
+          : null,
+    );
+    const metas = await scraper.getCatalog(
+      {
+        id: "kisskh.series.TVSeries",
+        type: "series",
+        extra: { skip: 0 },
+      } as any,
+      { providers: {} } as any,
+    );
+    expect(metas.map((meta) => meta.id)).toEqual(["kisskh:1", "kisskh:3"]);
+  });
+});
+
 describe("searchCatalog", () => {
   it("hides Coming-labeled titles from search too", async () => {
     axiosGet.mockResolvedValue(searchFixture);
@@ -130,5 +181,52 @@ describe("searchCatalog", () => {
       { providers: {} } as any,
     );
     expect(metas.map((meta) => meta.id)).toEqual(["kisskh:13632"]);
+  });
+
+  it("lets a TMDB verdict override the episode-count guess", async () => {
+    axiosGet.mockResolvedValue([
+      {
+        id: 5,
+        title: "One Part Movie",
+        episodesCount: 1,
+        thumbnail: "https://img/e.jpg",
+        label: "",
+      },
+      {
+        id: 6,
+        title: "Multi Part Movie",
+        episodesCount: 3,
+        thumbnail: "https://img/f.jpg",
+        label: "",
+      },
+    ]);
+    verifyType.mockImplementation(async (title: string) =>
+      title === "Multi Part Movie" ? "movie" : null,
+    );
+    const metas = await scraper.searchCatalog(
+      { type: "movie", extra: { search: "movie" } } as any,
+      { providers: {} } as any,
+    );
+    // "Multi Part Movie" fails the ==1 guess but the verdict keeps it;
+    // "One Part Movie" has no verdict and rides the guess
+    expect(metas.map((meta) => meta.id)).toEqual(["kisskh:5", "kisskh:6"]);
+  });
+
+  it("drops a search hit whose verdict contradicts the tab", async () => {
+    axiosGet.mockResolvedValue([
+      {
+        id: 7,
+        title: "Series in the Movie Tab",
+        episodesCount: 40,
+        thumbnail: "https://img/g.jpg",
+        label: "",
+      },
+    ]);
+    verifyType.mockResolvedValue("series");
+    const metas = await scraper.searchCatalog(
+      { type: "movie", extra: { search: "series" } } as any,
+      { providers: {} } as any,
+    );
+    expect(metas).toEqual([]);
   });
 });

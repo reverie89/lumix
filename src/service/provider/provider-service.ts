@@ -45,6 +45,14 @@ class ProviderService {
    * persisted here (see persistContentMapping) so every caller — catalog,
    * search, preview — pays one TMDB search per title per deployment; a miss
    * or a disabled TMDB key falls back to the provider's own image.
+   *
+   * `verifyTypes` (kisskh) additionally resolves the title's true content
+   * type — see tmdb.verifyType — and searches/persists against that surface
+   * instead of the claimed one; the row's caller drops items whose verdict
+   * contradicts it. A linked row whose stored type contradicts the claim is
+   * re-verified and re-linked, so stale mappings heal. `verifiedType` is
+   * null when unverifiable (TMDB off, no confident match) — callers keep
+   * the item then.
    */
   static async resolveProviderPoster(
     provider: Provider,
@@ -53,14 +61,47 @@ class ProviderService {
     fallback: string,
     type: ContentType,
     lookupTmdbId?: string | number,
-  ): Promise<{ poster: string; detail: ContentDetail | null }> {
+    verifyTypes: boolean = false,
+  ): Promise<{
+    poster: string;
+    detail: ContentDetail | null;
+    verifiedType: "series" | "movie" | null;
+  }> {
+    const claimed = type === "movie" ? "movie" : "series";
     const linked = await getContentByProviderId(
       `${provider}:${externalId}`,
     );
     if (linked) {
-      return { poster: linked.poster || fallback, detail: null };
+      const linkedType = linked.type;
+      if (verifyTypes && linkedType !== claimed) {
+        const verdict = await tmdb.verifyType(title);
+        if (verdict && verdict !== linkedType) {
+          const detail = await tmdb.searchDetail(title, verdict);
+          if (detail) {
+            await ProviderService.persistContentMapping(
+              detail,
+              provider,
+              externalId,
+              title,
+              { lookupTmdbId },
+            );
+            return {
+              poster: detail.thumbnail || fallback,
+              detail,
+              verifiedType: verdict,
+            };
+          }
+          return { poster: linked.poster || fallback, detail: null, verifiedType: verdict };
+        }
+        return { poster: linked.poster || fallback, detail: null, verifiedType: verdict ?? linkedType };
+      }
+      return { poster: linked.poster || fallback, detail: null, verifiedType: linkedType };
     }
-    const detail = await tmdb.searchDetail(title, type);
+    let verifiedType: "series" | "movie" | null = null;
+    if (verifyTypes) {
+      verifiedType = await tmdb.verifyType(title);
+    }
+    const detail = await tmdb.searchDetail(title, verifiedType ?? type);
     if (detail) {
       await ProviderService.persistContentMapping(
         detail,
@@ -70,7 +111,7 @@ class ProviderService {
         { lookupTmdbId },
       );
     }
-    return { poster: detail?.thumbnail || fallback, detail };
+    return { poster: detail?.thumbnail || fallback, detail, verifiedType };
   }
 
   /**

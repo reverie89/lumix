@@ -235,6 +235,130 @@ describe("TMDB language threading", () => {
   });
 });
 
+describe("verifyType", () => {
+  const movieSearchFixture = {
+    results: [
+      {
+        id: 500,
+        title: "The Glory",
+        original_title: "The Glory",
+        overview: "movie overview",
+        release_date: "2021-01-01",
+        poster_path: "/movie-poster.jpg",
+      },
+    ],
+  };
+  const movieOnlyUrl = (url: string) => url.includes("/search/movie");
+  const tvSearchResult = (name: string) => ({
+    results: [
+      {
+        id: 1,
+        name,
+        original_name: name,
+        overview: "tv overview",
+        first_air_date: "2022-01-01",
+        poster_path: null,
+      },
+    ],
+  });
+
+  it("returns null without requests when no key is configured", async () => {
+    vi.stubEnv("TMDB_API_KEY", "");
+    vi.resetModules();
+    const { tmdb } = await import("./tmdb.js");
+    expect(await tmdb.verifyType("Any Title")).toBeNull();
+    expect(requestedUrls()).toHaveLength(0);
+    vi.unstubAllEnvs();
+  });
+
+  it("trusts the only confident surface", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce(fixtures.tvSearch) // /search/tv matches
+      .mockResolvedValueOnce({ results: [] }); // /search/movie empty
+    expect(await tmdb.verifyType("The Glory")).toBe("series");
+    const kinds = requestedUrls().map((url) => (movieOnlyUrl(url) ? "movie" : "tv"));
+    expect(kinds).toEqual(["tv", "movie"]);
+    vi.unstubAllEnvs();
+  });
+
+  it("trusts the movie surface when tv matches nothing", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce(movieSearchFixture);
+    expect(await tmdb.verifyType("The Glory")).toBe("movie");
+    vi.unstubAllEnvs();
+  });
+
+  it("compares fuse scores when both surfaces match", async () => {
+    const { tmdb } = await importTmdb();
+    // Exact title on the movie surface beats the fuzzy tv candidate
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce(tvSearchResult("The Glory Show"))
+      .mockResolvedValueOnce(movieSearchFixture);
+    expect(await tmdb.verifyType("The Glory")).toBe("movie");
+    vi.unstubAllEnvs();
+  });
+
+  it("prefers the better match regardless of surface order", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce(fixtures.tvSearch) // exact "The Glory" on tv
+      .mockResolvedValueOnce({
+        results: [
+          {
+            id: 2,
+            title: "The Glory Road",
+            original_title: "The Glory Road",
+            overview: "",
+            release_date: "2020-01-01",
+            poster_path: null,
+          },
+        ],
+      });
+    expect(await tmdb.verifyType("The Glory")).toBe("series");
+    vi.unstubAllEnvs();
+  });
+
+  it("records per-surface misses and short-circuits the next call", async () => {
+    const { tmdb } = await importTmdb();
+    vi.mocked(axiosGet).mockResolvedValue({ results: [] });
+    expect(await tmdb.verifyType("Nowhere Title")).toBeNull();
+    expect(requestedUrls()).toHaveLength(2);
+    expect(await tmdb.verifyType("Nowhere Title")).toBeNull();
+    expect(requestedUrls()).toHaveLength(2);
+    vi.unstubAllEnvs();
+  });
+
+  it("skips only the surface that already missed", async () => {
+    const { tmdb } = await importTmdb();
+    const halfKnownMovie = {
+      results: [
+        {
+          id: 3,
+          title: "Half Known Title",
+          original_title: "Half Known Title",
+          overview: "",
+          release_date: "2020-01-01",
+          poster_path: null,
+        },
+      ],
+    };
+    // First call: tv empty (miss), movie matches
+    vi.mocked(axiosGet)
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce(halfKnownMovie);
+    expect(await tmdb.verifyType("Half Known Title")).toBe("movie");
+    // Second call: the tv miss suppresses /search/tv; movie re-checks
+    vi.mocked(axiosGet).mockClear();
+    vi.mocked(axiosGet).mockResolvedValueOnce(halfKnownMovie);
+    expect(await tmdb.verifyType("Half Known Title")).toBe("movie");
+    expect(requestedUrls().every((url) => movieOnlyUrl(url))).toBe(true);
+    vi.unstubAllEnvs();
+  });
+});
+
 describe("degenerate TMDB responses", () => {
   it("maps an undated, artless series without NaN years or broken poster urls", async () => {
     const { tmdb } = await importTmdb();

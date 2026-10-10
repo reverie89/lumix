@@ -20,15 +20,24 @@ export interface Search {
   title: string;
 }
 
+/** A match plus the scores behind it: fuse is a distance (lower is
+ * better), tokenScore the fuzzball ratio that passed the gate. */
+export interface ScoredMatch<T> {
+  item: T;
+  fuseScore: number;
+  tokenScore: number;
+}
+
 /**
- * Loop through all search terms and find the best fit
+ * Loop through all search terms and find the best fit, scores included —
+ * callers comparing matches across surfaces (tv vs movie) need them.
  */
-export function matchTitle<T extends Search>(
+export function bestMatch<T extends Search>(
   results: T[],
   title: string,
   year?: number,
   season?: number,
-): T[] {
+): ScoredMatch<T> {
   const options: IFuseOptions<SearchItem<T>> = {
     keys: ["normalizedTitle"],
     includeScore: true,
@@ -84,7 +93,23 @@ export function matchTitle<T extends Search>(
     `Match | ${best.fuseResult.item.original.title}, Fuse ${best.fuseResult.score?.toFixed(3)}, Fuzz ${tokenScore}`,
   );
 
-  return [best.fuseResult.item.original];
+  return {
+    item: best.fuseResult.item.original,
+    fuseScore: best.fuseResult.score ?? 1,
+    tokenScore,
+  };
+}
+
+/**
+ * Loop through all search terms and find the best fit
+ */
+export function matchTitle<T extends Search>(
+  results: T[],
+  title: string,
+  year?: number,
+  season?: number,
+): T[] {
+  return [bestMatch(results, title, year, season).item];
 }
 
 function createSearchList(rawTitle: string, season?: number, year?: number) {

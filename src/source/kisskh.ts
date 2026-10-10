@@ -163,20 +163,30 @@ export class KisskhScraper extends BaseProvider {
       config,
     );
     if (!searchResults[0]) return [];
-    const filterResults = searchResults
-      .filter(isReleased)
-      .filter((result) => {
-        if (type == "series") return result.episodesCount > 1;
-        else return result.episodesCount == 1;
-      })
-      .slice(0, this.pageSize);
+    // Type gate per result, in order, until the page fills: a TMDB verdict
+    // overrides kisskh's episode-count guess (multi-part movies would count
+    // as series); an unverifiable title keeps the guess (the TMDB-off path —
+    // verifyType is null without a key, so behavior is unchanged there)
+    const dbType = type === "movie" ? "movie" : "series";
+    const filterResults: SearchResult[] = [];
+    for (const result of searchResults.filter(isReleased)) {
+      if (filterResults.length >= this.pageSize) break;
+      const verdict = await tmdb.verifyType(result.title);
+      const matches =
+        verdict !== null
+          ? verdict === dbType
+          : type == "series"
+            ? result.episodesCount > 1
+            : result.episodesCount == 1;
+      if (matches) filterResults.push(result);
+    }
     const metas = await Promise.all(
       filterResults.map((kissItem) =>
         this.toPreview(kissItem, kissItem.title, type, kissItem.thumbnail, {
           // kisskh keeps its own upstream thumbnail as the background (same
           // rule as getCatalog)
           background: kissItem.thumbnail,
-        }),
+        }).then(({ meta }) => meta),
       ),
     );
     return metas;
@@ -220,7 +230,15 @@ export class KisskhScraper extends BaseProvider {
         }),
       ),
     );
-    return metas;
+    // TMDB type gate: a confident cross-surface match that contradicts this
+    // row's type is dropped (the Hollywood rows serve one mixed upstream
+    // list to both rows); unverifiable titles stay
+    return metas
+      .filter(
+        ({ verifiedType }) =>
+          !verifiedType || verifiedType === dbContentType,
+      )
+      .map(({ meta }) => meta);
   }
 
   async getMeta(
@@ -237,10 +255,12 @@ export class KisskhScraper extends BaseProvider {
     let year = safeYear(validRelease ? releaseDate.getFullYear() : undefined);
     let date = (validRelease ? releaseDate : new Date()).toISOString();
     // TMDB text localizes to the config language (matching stays English,
-    // see searchDetail)
+    // see searchDetail). The verified type steers the search surface when
+    // the row's claim was wrong; the meta's own type stays as requested —
+    // clients key their stream requests off it
     const tmdbDetail = await tmdb.searchDetail(
       detail.title,
-      type,
+      (await tmdb.verifyType(detail.title)) ?? type,
       undefined,
       tmdbLanguage(config),
     );
@@ -293,6 +313,9 @@ export class KisskhScraper extends BaseProvider {
   }
 
   protected providerIdField = "kisskhId" as const;
+  // kisskh mislabels types: its Hollywood rows serve one mixed upstream list
+  // to the series and movie row, and search guesses from episode count
+  protected override readonly verifyTypes = true;
 
   /**
    * The stream target: the content's kisskh id when present, else a title

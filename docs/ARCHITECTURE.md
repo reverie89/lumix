@@ -57,6 +57,18 @@ Tier picks default to the explicit sets in `src/lib/manifest.ts`
 from them); `__all__` remains a valid pick that the normalizers expand
 server-side to every option of the tier.
 
+## kisskh mislabels types
+
+kisskh's Hollywood/US rows serve one mixed upstream list (`type=4`) to both
+the series and the movie row, and search guesses from episode count — so
+`KisskhScraper` is the only provider with `verifyTypes` on:
+`tmdb.verifyType` searches both TMDB surfaces and keeps the confident match,
+catalog/search rows drop items whose verdict contradicts the row
+(unverifiable titles — TMDB off, no confident match — keep the
+episode-count guess, so TMDB-off behavior is unchanged), and the verdict
+also steers which surface enrichment searches. `BaseProvider.verifyTypes`
+defaults off; ole/iyf rows are already type-filtered upstream.
+
 ## Hosts and subtitles
 
 `isKisskhHost` (`src/utils/format.ts`, second-level label rule) classifies

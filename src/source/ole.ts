@@ -196,7 +196,7 @@ export class OleScraper extends BaseProvider {
             this.imageUrl(item.picThumb || item.pic),
           ),
         ),
-    );
+    ).then((previews) => previews.map(({ meta }) => meta));
   }
 
   /**
@@ -232,7 +232,7 @@ export class OleScraper extends BaseProvider {
           this.imageUrl(item.picThumb || item.pic),
         ),
       ),
-    );
+    ).then((previews) => previews.map(({ meta }) => meta));
   }
 
   async getMeta(

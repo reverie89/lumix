@@ -44,6 +44,12 @@ export abstract class BaseProvider {
   // The ContentDetail field carrying this provider's external id — db
   // stream lookups key on `${name}:${externalId}`
   protected abstract providerIdField: "kisskhId" | "oleId" | "iyfId";
+  /**
+   * Opt-in TMDB type verification (see tmdb.verifyType): catalog/search rows
+   * drop items whose verified type confidently contradicts the row. Off
+   * keeps every row the provider's upstream gave it.
+   */
+  protected readonly verifyTypes: boolean = false;
 
   constructor(name: Provider) {
     this.name = name;
@@ -183,9 +189,10 @@ export abstract class BaseProvider {
 
   /**
    * Catalog item → Stremio preview; the poster resolves DB-first (see
-   * ProviderService.resolveProviderPoster). `background` pins the background
-   * image; unset means the resolved poster. Movies point their default
-   * video at season 1, episode 1.
+   * ProviderService.resolveProviderPoster), whose `verifiedType` rides along
+   * for providers that gate their rows on it. `background` pins the
+   * background image; unset means the resolved poster. Movies point their
+   * default video at season 1, episode 1.
    */
   protected async toPreview(
     item: { id: number | string },
@@ -196,15 +203,16 @@ export abstract class BaseProvider {
       background?: string | undefined;
       lookupTmdbId?: string | number | undefined;
     } = {},
-  ): Promise<MetaDetail> {
+  ): Promise<{ meta: MetaDetail; verifiedType: "series" | "movie" | null }> {
     const id = `${this.name}:${item.id}`;
-    const { poster } = await ProviderService.resolveProviderPoster(
+    const { poster, verifiedType } = await ProviderService.resolveProviderPoster(
       this.name,
       item.id,
       name,
       fallbackPoster,
       type,
       opts.lookupTmdbId,
+      this.verifyTypes,
     );
     const meta: MetaDetail = {
       id,
@@ -216,7 +224,7 @@ export abstract class BaseProvider {
     if (type === "movie") {
       meta.behaviorHints = { defaultVideoId: `${id}:1:1` };
     }
-    return meta;
+    return { meta, verifiedType };
   }
 
   /**
