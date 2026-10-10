@@ -5,11 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-10
 
 ### Added
 
 - 爱壹帆 (iyf) provider — catalog, meta and stream endpoints; subtitles are burned in upstream, so its subtitle endpoint serves none
+- startup splash — the container log opens with the wordmark and release version
 
 ### Changed
 
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a warm content cache resolved without its episode — every episode of a series streamed episode 1 for the cache's lifetime
 - kisskh catalogs and search hide pre-premiere rows marked "Coming <date>" upstream
+
 ## [0.2.1] - 2026-10-09
 
 ### Added
@@ -62,8 +64,8 @@ Initial release of **lumix** — a Stremio addon that streams dramas, series and
 - optional outbound proxies — Webshare rotating proxy for kisskh, Mediaflow-style wrapper for TMDB and subtitles
 - Docker deployment — Dockerfile, docker-compose.yaml and a CI workflow publishing the image to ghcr.io; the server always listens on port 55913
 
-
-[unreleased]: https://github.com/reverie89/lumix/compare/v0.2.1...HEAD
+[unreleased]: https://github.com/reverie89/lumix/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/reverie89/lumix/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/reverie89/lumix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/reverie89/lumix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/reverie89/lumix/releases/tag/v0.1.0

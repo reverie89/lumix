@@ -8,10 +8,23 @@ import { initMigrations } from "./db/drizzle.js";
 import { buildManifest } from "./lib/manifest.js";
 import { ENV } from "./utils/env.js";
 import { Logger } from "./utils/logger.js";
+import { APP_NAME, APP_VERSION } from "./utils/version.js";
 
 const logger = new Logger("SERVER");
 const HOST = "0.0.0.0";
 const PORT = 55913;
+
+// Boot-time splash; APP_VERSION is the release version from package.json.
+// Logged as one multi-line message so only the first line carries the
+// timestamp prefix.
+const SPLASH = `
+██╗      ██╗   ██╗███╗   ███╗██╗██╗  ██╗
+██║      ██║   ██║████╗ ████║██║╚██╗██╔╝
+██║      ██║   ██║██╔████╔██║██║ ╚███╔╝
+██║      ██║   ██║██║╚██╔╝██║██║ ██╔██╗
+███████╗ ╚██████╔╝██║ ╚═╝ ██║██║██╔╝ ██╗
+╚══════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝╚═╝  ╚═╝
+  ${APP_NAME} v${APP_VERSION}`;
 
 /**
  * Hit the default manifest + catalogs so their upstream fetches warm the
@@ -56,10 +69,11 @@ app.onError((err, c) => {
 });
 
 // Start server
+logger.log(SPLASH);
 await initMigrations();
 try {
   serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
-    logger.log(`lumix running on http://${HOST}:${PORT}`);
+    logger.log(`${APP_NAME} running on http://${HOST}:${PORT}`);
   });
   if (ENV.WARM_CACHE) {
     await warmCache();

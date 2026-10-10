@@ -6,7 +6,6 @@ import {
   ManifestCatalog,
   ManifestExtra,
 } from "@stremio-addon/sdk";
-import pkg from "../../package.json" with { type: "json" };
 import type {
   ConfigLanguage,
   IyfSettings,
@@ -33,6 +32,11 @@ import {
   SHORT_NAME,
   TIER_LABELS_ZH,
 } from "../utils/constant.js";
+import {
+  APP_DESCRIPTION,
+  APP_NAME,
+  APP_VERSION,
+} from "../utils/version.js";
 
 // The default selections: what the unconfigured manifest, a fresh config
 // page and a re-added provider start from. Tiers are optional on the config
@@ -136,7 +140,7 @@ function buildCatalogMap(
 
 const baseManifest: Manifest = {
   id: "community.lumix",
-  version: pkg.version,
+  version: APP_VERSION,
   catalogs: [],
   resources: [],
   // Stamped per request in buildManifest — the addon is reachable at
@@ -151,8 +155,8 @@ const baseManifest: Manifest = {
     Prefix.IYF,
   ],
   types: ["movie", "series"],
-  name: pkg.name,
-  description: pkg.description,
+  name: APP_NAME,
+  description: APP_DESCRIPTION,
   behaviorHints: {
     adult: false,
     p2p: false,
@@ -181,7 +185,7 @@ export function buildManifest(config?: UserConfig, origin = "") {
   manifest.resources = [...baseManifest.resources];
   manifest.catalogs = [...baseManifest.catalogs];
   manifest.description =
-    config.language === "zh" ? MANIFEST_DESCRIPTION_ZH : pkg.description;
+    config.language === "zh" ? MANIFEST_DESCRIPTION_ZH : APP_DESCRIPTION;
   const catalogMap = buildCatalogMap(config.catalogs, config.language);
   if (config.catalog && config.catalog.length > 0) {
     manifest.resources.push("catalog");

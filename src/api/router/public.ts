@@ -3,7 +3,6 @@ import crypto from "crypto";
 import fs from "fs";
 import { Hono } from "hono";
 import path from "path";
-import pkg from "../../../package.json" with { type: "json" };
 import { defaultConfig } from "../../lib/manifest.js";
 import { ENV } from "../../utils/env.js";
 import {
@@ -11,6 +10,7 @@ import {
   KISSKH_DEFAULT_MIRRORS,
   OLE_DEFAULT_MIRRORS,
 } from "../../utils/constant.js";
+import { APP_VERSION } from "../../utils/version.js";
 
 const publicRouter = new Hono();
 const rootDir = process.cwd();
@@ -50,7 +50,7 @@ const getLandingPage = () => {
   if (!fs.existsSync(filePath)) return null;
   cachedLandingHtml = fs
     .readFileSync(filePath, "utf8")
-    .replace("{{VERSION}}", pkg.version)
+    .replace("{{VERSION}}", APP_VERSION)
     .replace("{{DEFAULT_CONFIG}}", JSON.stringify(defaultConfig))
     .replace("{{DEFAULT_MIRRORS}}", JSON.stringify(KISSKH_DEFAULT_MIRRORS))
     .replace(
