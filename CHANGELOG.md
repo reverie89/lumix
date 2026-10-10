@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - the docker runtime image shrinks to bare alpine + the node binary
+
+### Fixed
+
+- a warm content cache resolved without its episode — every episode of a series streamed episode 1 for the cache's lifetime
+- kisskh catalogs and search hide pre-premiere rows marked "Coming <date>" upstream
 ## [0.2.1] - 2026-10-09
 
 ### Added

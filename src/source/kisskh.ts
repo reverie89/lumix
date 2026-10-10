@@ -41,6 +41,7 @@ interface SearchResult {
   title: string;
   episodesCount: number;
   thumbnail: string;
+  label?: string;
 }
 
 // Shared mirror memory: every kisskh request feeds the same origin metrics.
@@ -65,6 +66,14 @@ interface KisskhCatalogItem {
   thumbnail: string;
   id: number;
   title: string;
+  label?: string;
+}
+
+// Pre-premiere rows carry a "Coming <date>" label upstream (blank or
+// whitespace once airing); their episode rows exist but the stream files
+// don't, so they stay hidden until kisskh clears the label.
+function isReleased(item: { label?: string }): boolean {
+  return !/^coming/i.test((item.label ?? "").trim());
 }
 interface KisskhDetail {
   id: string;
@@ -155,6 +164,7 @@ export class KisskhScraper extends BaseProvider {
     );
     if (!searchResults[0]) return [];
     const filterResults = searchResults
+      .filter(isReleased)
       .filter((result) => {
         if (type == "series") return result.episodesCount > 1;
         else return result.episodesCount == 1;
@@ -196,7 +206,9 @@ export class KisskhScraper extends BaseProvider {
 
     this.logger.log(`GET catalog | ${url}`);
     const catalogData = await kisskhFailover.get<KisskhCatalogData>(url);
-    const flatDatas = Array.isArray(catalogData?.data) ? catalogData.data : [];
+    const flatDatas = (
+      Array.isArray(catalogData?.data) ? catalogData.data : []
+    ).filter(isReleased);
 
     const metas = await Promise.all(
       flatDatas.map((kissItem) =>

@@ -269,18 +269,18 @@ class ProviderService {
     config?: UserConfig,
   ): Promise<ContentDetail | null> {
     const contentKey = `content:${source.provider}:${externalId}`;
-    const cached = cache.get(contentKey);
-    if (cached) return cached;
-    const probe: ContentId = {};
-    probe[source.idField] = externalId;
-    let content = await ProviderService.getDbContent(
-      type,
-      probe,
-      parseInt(season ?? "1"),
-    );
-    if (content) {
-      logger.log(`Found DB content ${contentKey}`);
-    } else {
+    let content: ContentDetail | null = cache.get(contentKey);
+    if (!content) {
+      const probe: ContentId = {};
+      probe[source.idField] = externalId;
+      content = await ProviderService.getDbContent(
+        type,
+        probe,
+        parseInt(season ?? "1"),
+      );
+      if (content) logger.log(`Found DB content ${contentKey}`);
+    }
+    if (!content) {
       const linked = await getProviderContentById(
         `${source.provider}:${externalId}`,
       );

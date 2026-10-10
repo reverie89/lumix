@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ProviderService from "./provider-service.js";
+import ProviderService, {
+  ProviderContentSource,
+} from "./provider-service.js";
 import { Provider } from "../../utils/config.js";
 import { ContentDetail } from "../../source/meta.js";
+import { cache } from "../../utils/cache.js";
 import { tmdb } from "../../source/tmdb.js";
 
 // isTmdbEnabled reads ENV at call time, but ENV parses once at import — the
@@ -255,5 +258,57 @@ describe("syncContentAndProvider", () => {
       "Stream Title",
     );
     persistSpy.mockRestore();
+  });
+});
+
+describe("resolveProviderDetail", () => {
+  const source: ProviderContentSource = {
+    provider: Provider.OLE,
+    idField: "oleId",
+    fetchDetail: vi.fn(async () => ({ title: "Cache Test", year: 2026 })),
+  };
+
+  beforeEach(() => {
+    cache.clearAll();
+  });
+
+  it("attaches season/episode on a warm cache hit, not only on the first call", async () => {
+    // Miss path via the providerContent row — the branch that caches
+    vi.spyOn(ProviderService, "getDbContent").mockResolvedValue(null);
+    dbGetProviderContent.mockResolvedValue({
+      id: "ole:85005",
+      contentId: null,
+      provider: "ole",
+      externalId: "85005",
+      title: "Cache Test",
+      year: 2026,
+    });
+    const first = await ProviderService.resolveProviderDetail(
+      source,
+      "85005",
+      "series",
+      "1",
+      "2",
+    );
+    const second = await ProviderService.resolveProviderDetail(
+      source,
+      "85005",
+      "series",
+      "1",
+      "3",
+    );
+    expect(first).toMatchObject({ season: 1, episode: 2 });
+    expect(second).toMatchObject({ season: 1, episode: 3 });
+    // The shared cache entry stays episode-free for the next caller
+    expect(cache.get("content:ole:85005")).toEqual({
+      id: "85005",
+      title: "Cache Test",
+      year: 2026,
+      type: "series",
+      oleId: "85005",
+    });
+    // The second call was served by the cache, not a re-resolution
+    expect(ProviderService.getDbContent).toHaveBeenCalledTimes(1);
+    expect(source.fetchDetail).not.toHaveBeenCalled();
   });
 });
