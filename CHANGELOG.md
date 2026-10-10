@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 爱壹帆 (iyf) provider — catalog, meta and stream endpoints; subtitles are burned in upstream, so its subtitle endpoint serves none
+
 ### Changed
 
 - the docker runtime image shrinks to bare alpine + the node binary

@@ -20,6 +20,8 @@
   --kisskh-on-accent: var(--on-accent);
   --ole-accent: #81c995;
   --ole-on-accent: #072711;
+  --iyf-accent: #fdd663;
+  --iyf-on-accent: #3c2b00;
   --rounded-md: 10px;
   --rounded-lg: 14px;
   --xxs: 0.2rem;
@@ -408,6 +410,10 @@ p:first-child {
   --provider-accent: var(--ole-accent);
   --provider-on-accent: var(--ole-on-accent);
 }
+.provider-section[data-provider="iyf"] {
+  --provider-accent: var(--iyf-accent);
+  --provider-on-accent: var(--iyf-on-accent);
+}
 .provider-name {
   margin-top: 0;
   font-size: 1.15rem;
@@ -441,6 +447,10 @@ p:first-child {
   background: var(--ole-accent);
   color: var(--ole-on-accent);
 }
+#provider-order .order-row[data-value="iyf"] .order-index {
+  background: var(--iyf-accent);
+  color: var(--iyf-on-accent);
+}
 #provider-more .chip[data-value="kisskh"] {
   border-color: var(--kisskh-accent);
   color: var(--kisskh-accent);
@@ -448,6 +458,10 @@ p:first-child {
 #provider-more .chip[data-value="ole"] {
   border-color: var(--ole-accent);
   color: var(--ole-accent);
+}
+#provider-more .chip[data-value="iyf"] {
+  border-color: var(--iyf-accent);
+  color: var(--iyf-accent);
 }
 .config-hint {
   color: var(--danger);

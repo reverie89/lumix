@@ -11,23 +11,15 @@ TV/10-foot focus and hint rules). Server-side config handling is in
 
 - **Language** — the selector (English / 中文, default English) translates
   the page and stores the config's top-level `language`, which localizes
-  the Stremio-side catalog names (`[L/欧乐] 大陆`), the manifest
-  description and TMDB text (zh fetches TMDB details with `language=zh-CN`;
-  searches stay English so title matching is unaffected).
-- **Providers** — the Provider list is the add/remove control: each added
-  provider is a numbered row (‹ › ✕), providers missing from the list sit
-  below it as tap-to-add chips, and removing keeps the picks for a re-add
-  while leaving the provider out of the config entirely (both providers
-  start enabled on a fresh page, kisskh first).
-- **Sections** — each added provider renders a color-coded section — kisskh
-  in the page's Google Blue, 欧乐 in green — holding its groups: each tier
-  is an ordered pick list with tap-to-add chips, tiers are individually
-  optional (an empty tier adds no catalogs), and a provider only needs one
-  tier with picks.
-- **Ordering** — the provider-order list (the sections stack in its order),
-  the tier-group order (‹ › in each tier legend) and the pick order within
-  each tier all flow into the config and become the catalog order Stremio
-  displays.
+  the Stremio-side catalog names, the manifest description and TMDB text
+  (zh fetches TMDB details with `language=zh-CN`; searches stay English so
+  title matching is unaffected).
+- Removing a provider keeps its picks for a re-add while leaving the
+  provider out of the config entirely.
+- A fresh page starts all three providers enabled, kisskh first.
+- Tiers are individually optional (an empty tier adds no catalogs).
+- All three ordering levels (provider list, tier groups, picks within a
+  tier) flow into the config as the catalog order Stremio displays.
 
 ## Config encoding
 
@@ -39,5 +31,5 @@ config.
 
 The page auto-prefixes `https://` when the user types no scheme, and
 deduplicates picks exactly as `normalizeConfig` does server-side (see
-Mirrors in [ARCHITECTURE.md](ARCHITECTURE.md) for the defaults, the
-injection and the walk order).
+Mirrors in [ARCHITECTURE.md](ARCHITECTURE.md) for what each provider's
+picks mean, the env-provided defaults and the failover order).

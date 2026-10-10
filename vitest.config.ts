@@ -18,6 +18,7 @@ export default defineConfig({
       // a developer runs with (dotenv loads it above)
       KISSKH_MIRRORS: "https://kisskh.test",
       OLE_HOSTS: "https://ole.test",
+      IYF_HOSTS: "https://iyf.test",
     },
     projects: [
       {

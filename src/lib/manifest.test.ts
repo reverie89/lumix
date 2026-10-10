@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { KisskhSettings, OleSettings, UserConfig } from "../utils/config.js";
+import type {
+  IyfSettings,
+  KisskhSettings,
+  OleSettings,
+  UserConfig,
+} from "../utils/config.js";
 import { buildManifest, defaultConfig } from "./manifest.js";
 import { Provider } from "../utils/config.js";
 import { KISSKH_HIDDEN_CATALOGS, normalizeKisskhTiers } from "../source/kisskh-catalogs.js";
 import { OLE_HIDDEN_CATALOGS, normalizeOleTiers } from "../source/ole-catalogs.js";
+import { IYF_HIDDEN_CATALOGS, normalizeIyfTiers } from "../source/iyf-catalogs.js";
 import {
   MANIFEST_DESCRIPTION_ZH,
   PROVIDER_LABELS,
@@ -51,6 +57,29 @@ describe("defaultConfig", () => {
     ]);
     // update defaults to none — no Popular/Score rows anywhere
     expect(ole.update).toEqual([]);
+  });
+
+  it("keeps iyf opt-in: seeded settings, no default catalog rows", () => {
+    const iyf = defaultConfig.providers.iyf as IyfSettings;
+    expect(iyf.order).toEqual(["type", "region", "year", "quality", "sort"]);
+    expect(iyf.type).toEqual(["TVSeries", "Movies"]);
+    expect(iyf.region).toEqual([
+      "Chinese",
+      "Hongkong",
+      "Taiwanese",
+      "Japanese",
+      "Korean",
+    ]);
+    expect(iyf.year).toEqual([]);
+    expect(iyf.quality).toEqual([]);
+    expect(iyf.sort).toEqual([]);
+    // Not enabled until the user adds it on the page: the unconfigured
+    // manifest and default traffic never scrape iyf
+    expect(defaultConfig.catalog).not.toContain(Provider.IYF);
+    expect(defaultConfig.stream).not.toContain(Provider.IYF);
+    expect(
+      defaultConfig.catalogs.some((id) => id.startsWith("iyf.")),
+    ).toBe(false);
   });
 
   it("expands the default tiers with no status rows, update rows first, kisskh before ole", () => {
@@ -134,7 +163,7 @@ describe("buildManifest language", () => {
     expect(manifest.description).toBe(buildManifest(undefined).description);
   });
 
-  it("labels every tier option of both providers in zh (no catalog name falls back to the raw token)", () => {
+  it("labels every tier option of every provider in zh (no catalog name falls back to the raw token)", () => {
     const kisskh = normalizeKisskhTiers({
       type: ["__all__"],
       region: ["__all__"],
@@ -146,6 +175,13 @@ describe("buildManifest language", () => {
       region: ["__all__"],
       update: ["__all__"],
     });
+    const iyf = normalizeIyfTiers({
+      type: ["__all__"],
+      region: ["__all__"],
+      year: ["__all__"],
+      quality: ["__all__"],
+      sort: ["__all__"],
+    });
     // Explicit tier keys: the normalized shapes also carry `order`, whose
     // entries (tier names) are not catalog options
     const options = new Set([
@@ -156,6 +192,11 @@ describe("buildManifest language", () => {
       ...ole.type,
       ...ole.region,
       ...ole.update,
+      ...iyf.type,
+      ...iyf.region,
+      ...iyf.year,
+      ...iyf.quality,
+      ...iyf.sort,
       // hidden search catalogs get manifest names too
       "Search",
     ]);
@@ -163,8 +204,9 @@ describe("buildManifest language", () => {
     for (const option of options) {
       expect(TIER_LABELS_ZH[option], `missing zh label for ${option}`).toBeTruthy();
     }
-    for (const provider of [Provider.KISSKH, Provider.OLE]) {
+    for (const provider of [Provider.KISSKH, Provider.OLE, Provider.IYF]) {
       expect(PROVIDER_LABELS[provider], `missing label for ${provider}`).toBeTruthy();
     }
   });
+
 });

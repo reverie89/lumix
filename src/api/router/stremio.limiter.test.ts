@@ -12,6 +12,9 @@ describe("limiterKey", () => {
     expect(limiterKey("catalog", IP, "/catalog/series/ole.series.TVSeries.json")).toBe(
       `${IP}:ole`,
     );
+    expect(limiterKey("catalog", IP, "/catalog/series/iyf.series.TVSeries.json")).toBe(
+      `${IP}:iyf`,
+    );
   });
 
   it("splits config-scoped and search catalog requests too", () => {

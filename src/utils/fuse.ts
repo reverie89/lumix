@@ -19,6 +19,7 @@ const logger = new Logger("FUSE");
 export interface Search {
   title: string;
 }
+
 /**
  * Loop through all search terms and find the best fit
  */

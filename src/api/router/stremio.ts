@@ -40,6 +40,11 @@ import {
   normalizeOleTiers,
   OLE_HIDDEN_CATALOGS,
 } from "../../source/ole-catalogs.js";
+import {
+  expandIyfCatalogs,
+  IYF_HIDDEN_CATALOGS,
+  normalizeIyfTiers,
+} from "../../source/iyf-catalogs.js";
 import { isMirrorUrl } from "../../utils/format.js";
 import { SHORT_NAME } from "../../utils/constant.js";
 import { ENV } from "../../utils/env.js";
@@ -68,7 +73,7 @@ const getName = () => `⏱️${SHORT_NAME}\nRate Limit`;
 // Catalog requests are provider-scoped by id ("kisskh.series.Korean"), so the
 // catalog budget splits per provider per IP — scrolling one provider's boards
 // can't starve the other. Meta/stream/subtitles stay one budget per IP:
-// imdb/tmdb ids resolve against both providers in a single request. Config
+// imdb/tmdb ids resolve against every provider in a single request. Config
 // segments are base64url (no dots), so "<provider>." only matches catalog ids.
 const providerIdPrefix = new RegExp(
   `(${Object.values(Provider).join("|")})\\.`,
@@ -286,6 +291,7 @@ const asStringArray = (value: any): string[] =>
 const KNOWN_PROVIDERS: readonly Provider[] = [
   Provider.KISSKH,
   Provider.OLE,
+  Provider.IYF,
 ];
 
 // The config's top-level `order` names the enabled providers in the order the
@@ -374,6 +380,22 @@ function normalizeConfig(raw: any): UserConfig {
         { ...tiers, mirrors },
         expandKisskhCatalogs(tiers),
         KISSKH_HIDDEN_CATALOGS,
+      );
+    } else if (provider === Provider.IYF) {
+      const tiers = normalizeIyfTiers({
+        order: asStringArray(rawSettings.order),
+        type: asStringArray(rawSettings.type),
+        region: asStringArray(rawSettings.region),
+        year: asStringArray(rawSettings.year),
+        quality: asStringArray(rawSettings.quality),
+        sort: asStringArray(rawSettings.sort),
+      });
+      addProviderBlock(
+        config,
+        provider,
+        { ...tiers, mirrors },
+        expandIyfCatalogs(tiers),
+        IYF_HIDDEN_CATALOGS,
       );
     } else {
       const tiers = normalizeOleTiers({

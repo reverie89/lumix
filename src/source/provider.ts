@@ -43,7 +43,7 @@ export abstract class BaseProvider {
   abstract readonly failover: MirrorFailover;
   // The ContentDetail field carrying this provider's external id — db
   // stream lookups key on `${name}:${externalId}`
-  protected abstract providerIdField: "kisskhId" | "oleId";
+  protected abstract providerIdField: "kisskhId" | "oleId" | "iyfId";
 
   constructor(name: Provider) {
     this.name = name;
@@ -109,15 +109,16 @@ export abstract class BaseProvider {
   /**
    * The external stream id for a content: its own id when the content
    * carries one, else the provider's title search. Null = the search found
-   * nothing.
+   * nothing. Numeric for kisskh/ole; iyf's alphanumeric key rides the
+   * string side.
    */
   protected abstract resolveStreamTarget(
     content: ContentDetail,
     config: UserConfig,
-  ): Promise<number | null>;
+  ): Promise<number | string | null>;
 
   protected abstract generateStreams(
-    extId: number,
+    extId: number | string,
     content: ContentDetail,
     config: UserConfig,
   ): Promise<Stream[]>;
@@ -129,8 +130,18 @@ export abstract class BaseProvider {
    * stream itself doesn't need it, so the response never blocks on the
    * TMDB round-trip.
    */
+  /**
+   * The url persisted for db replays. The default strips the query so one
+   * row accumulates per upstream asset; providers whose urls carry their
+   * playback credential in the query (signed m3u8s) override to keep it —
+   * a stripped signature is an unplayable replay.
+   */
+  protected dbStreamUrl(url: string): string {
+    return cleanUrl(url);
+  }
+
   protected buildStream(
-    extId: number,
+    extId: number | string,
     url: string,
     content: ContentDetail,
     config: UserConfig,
@@ -163,7 +174,7 @@ export abstract class BaseProvider {
         externalId: extId.toString(),
         season: "1",
         episode: episode?.toString() ?? "1",
-        url: cleanUrl(url),
+        url: this.dbStreamUrl(url),
         ttl: TTL_MS.stream,
       },
     ]);

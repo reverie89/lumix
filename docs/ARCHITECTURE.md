@@ -20,99 +20,88 @@ live in the root [AGENTS.md](../AGENTS.md).
 ## The config path
 
 1. `public/js/landing.js` collects the form into
-   `{ language, order, providers: { kisskh: { mirrors, order, type, region, status, update }, ole: { mirrors, order, type, region, update } } }`,
-   base64url-encodes it and shows `/{configBase64}/manifest.json`. The
-   top-level `order` is the provider order, each provider's `order` its tier
-   order, and every pick array carries the user's pick order — together they
-   are the catalog order Stremio displays. `language` is `"en"` or `"zh"`
-   (English default). Only Enabled providers are included; a provider
-   toggled on starts from its full default selection.
+   `{ language, order, providers: { kisskh: { mirrors, order, type, region, status, update }, ole: { mirrors, order, type, region, update }, iyf: { mirrors, order, type, region, year, quality, sort } } }`,
+   base64url-encodes it and shows `/{configBase64}/manifest.json`.
 2. `decodeConfig` (`src/api/router/stremio.ts`) decodes and **normalizes**:
    mirrors, tier picks (`__all__` expands), both `order` fields (unknowns
    dropped, missing appended in canonical order), `language` (`"zh"` only
-   when exactly that; absent/invalid/legacy → `"en"`) and the server-side
-   catalog-id expansion in that order. Every provider block present
-   contributes — a config may enable kisskh and 欧乐 together. Never trust a
-   decoded config's shape — `stremio.test.ts` pins each rule.
+   when exactly that) and the server-side catalog-id expansion. Every
+   provider block present contributes. Never trust a decoded config's
+   shape — `stremio.test.ts` pins each rule.
 3. `buildManifest(config)` turns the expanded `catalogs` into Stremio catalog
-   declarations (names/description localized through `TIER_LABELS_ZH` /
-   `PROVIDER_LABELS` in `utils/constant.ts` when `language` is zh — a test
-   pins label completeness against both catalogs files' options); the
-   handlers in `src/lib/addon.ts` gate every request through
-   `filterProvider` (config's `catalog`/`stream` lists).
+   declarations, localized through `TIER_LABELS_ZH` / `PROVIDER_LABELS` in
+   `utils/constant.ts` when `language` is zh (`manifest.test.ts` pins label
+   completeness for all three providers); the handlers in `src/lib/addon.ts`
+   gate every request through `filterProvider` (config's `catalog`/`stream`
+   lists).
 
 ## Provider catalogs are the single sources of truth
 
-`src/source/kisskh-catalogs.ts` and `src/source/ole-catalogs.ts` are the
-single sources of truth for their provider's categories: tier option lists,
-the canonical tier order (`KISSKH_TIER_ORDER`/`OLE_TIER_ORDER` —
-expansion follows the config's tier order and falls back to it),
-`expandKisskhCatalogs`/`expandOleCatalogs` (tier picks → catalog ids,
-used by both the page's server-side expansion and the manifest builder) and
-`getKisskhQuery`/`getOleQuery` (catalog name → upstream API query).
-Option names are shared where the concept is shared (Korean, TVSeries,
-Update…) — each catalogs file maps them to its own upstream API values. A
+`src/source/kisskh-catalogs.ts`, `src/source/ole-catalogs.ts` and
+`src/source/iyf-catalogs.ts` are the single sources of truth for their
+provider's categories: tier option lists, the canonical tier order
+(`*_TIER_ORDER`), `expand*Catalogs` (tier picks → catalog ids) and
+`get*Query` (catalog name → upstream API query). Option names are shared
+where the concept is shared (Korean, TVSeries, Update…; iyf's Popular/Score
+reuse ole's update names, while its Latest is add-time ordering — a
+different concept from ole's Last Update, so it keeps its own name);
+each catalogs file maps the names to its own upstream API values. A
 category change touches the catalogs file, the `TIER_OPTIONS` table in
-`public/js/landing.js`, and both zh label tables (`TIER_LABELS_ZH` in
+`public/js/landing.js`, and the zh label tables (`TIER_LABELS_ZH` in
 `src/utils/constant.ts`, `OPTION_LABELS_ZH` in `landing.js`) — nothing
-else; the manifest's label-completeness test enforces the server side.
-Their unit tests pin the row-expansion rules (each type pick is its own
-row; region/update picks add a series + movies pair; kisskh status rows are
-series-only; kisskh US queries the Hollywood type; ole Movies is the
-only movie-side type).
+else. The `*-catalogs.test.ts` files pin the row-expansion rules.
 
 Tier picks default to the explicit sets in `src/lib/manifest.ts`
-`defaultKisskhSettings` / `defaultOleSettings` (the unconfigured
-manifest, a fresh page and a re-added provider all start from them);
-`__all__` remains a valid pick that `normalizeKisskhTiers`/
-`normalizeOleTiers` expand server-side to every option of the tier.
+`defaultKisskhSettings` / `defaultOleSettings` / `defaultIyfSettings`
+(the unconfigured manifest, a fresh page and a re-added provider all start
+from them); `__all__` remains a valid pick that the normalizers expand
+server-side to every option of the tier.
 
 ## Hosts and subtitles
 
 `isKisskhHost` (`src/utils/format.ts`, second-level label rule) classifies
-hosts for the axios client selection (`src/utils/axios.ts`: mirrors on
-kisskh domains get the no-redirect client; ole's API host uses the
-default client) — it does not validate user mirrors (`isMirrorUrl`, same
+hosts for the axios client selection (`src/utils/axios.ts`:
+kisskh-domain mirrors get the no-redirect client; ole and iyf hosts use
+the default client) — it does not validate user mirrors (`isMirrorUrl`, same
 file: a mirror is any http(s) URL). Subtitles are separate:
 `isSubtitleSourceHost` (`kisskh-catalogs.ts`) owns the static `/subtitle`
 allowlist, its tests pin the tricky cases (`cdnvideo11.shop.evil.com` must
 not pass), and other-host origins are admitted at runtime via the
-seen-subtitle-origin registry in `kisskh.ts`. ole serves no subtitle
-files (subs are hardcoded upstream) — its `getSubtitles` returns `[]`.
+seen-subtitle-origin registry in `kisskh.ts`. ole and iyf serve no
+subtitle files (subs are hardcoded into the stream upstream) — their
+`getSubtitles` return `[]`.
 
 ## Mirrors
 
 kisskh has no single canonical domain; ole's picks are its API hosts
-(not web mirrors); a mirror is any http(s) URL the user inputs — the page
-auto-prefixes `https://` when no scheme is typed. The mirror defaults are a
-deployment setting: `KISSKH_MIRRORS` / `OLE_HOSTS` in env (ole's are
-its API hosts, not the web mirrors) — `utils/constant.ts
-KISSKH_DEFAULT_MIRRORS` / `OLE_DEFAULT_MIRRORS` filter them through
-`isMirrorUrl`; an empty env means no default mirrors. The server injects
-them into the config page (`public.ts` templates `{{DEFAULT_MIRRORS}}` /
-`{{OLE_DEFAULT_MIRRORS}}`), and both the page and `normalizeConfig`
+(not web mirrors); an iyf pick names a host family root or one of its
+subdomains — `iyfFamily` in `src/source/iyf.ts` derives the
+m10./rankv21./static./www. spellings. Mirror defaults are a deployment
+setting: `KISSKH_MIRRORS` / `OLE_HOSTS` / `IYF_HOSTS` in env, filtered
+through `isMirrorUrl` into the `*_DEFAULT_MIRRORS` of
+`src/utils/constant.ts` and injected into the config page by `public.ts`;
+an empty env means no default mirrors. The page and `normalizeConfig`
 deduplicate picks (case- and trailing-slash-insensitive, first occurrence
-wins). Requests walk the picked mirrors in the user's chosen order,
-skipping mirrors with a failure in the last `MIRROR_FAIL_TTL_MS` and
-otherwise falling back to the best success/fail ratio (`MirrorFailover` in
-`src/service/mirror-failover.ts`, one instance per provider). The page-side
-mirror UX is in [CONFIG_PAGE.md](CONFIG_PAGE.md).
+wins). Requests walk the picked mirrors in the user's chosen order —
+`MirrorFailover` (`src/service/mirror-failover.ts`) owns that algorithm and
+its tests pin it. The page-side mirror UX is in
+[CONFIG_PAGE.md](CONFIG_PAGE.md).
 
 ## Provider contract and vocabulary
 
-The abstract `BaseProvider` (`src/source/provider.ts`) defines the provider
-contract: the base owns the shared `getStreams`/`buildStream` template,
-`toPreview` and the TMDB year override — a scraper implements the
-catalog/meta/subtitle methods plus the stream hooks (`providerIdField`,
-`resolveStreamTarget`, `generateStreams`). `getMeta`/`getSubtitles` take an
-optional `config` so providers can read per-user settings (mirrors).
-`Provider`/`Prefix`/`UserConfig` live in `src/utils/config.ts` (leaf
-vocabulary — no upward imports).
+The abstract `BaseProvider` (`src/source/provider.ts`) owns the shared
+stream template; a scraper implements the catalog/meta/subtitle methods
+plus the stream hooks, with `getMeta`/`getSubtitles` taking the optional
+`config` for per-user mirrors. `Provider`/`Prefix`/`UserConfig` live in
+`src/utils/config.ts` (leaf vocabulary — no upward imports).
 
 ### Adding a provider
 
-A new scraper class + a `Provider` enum entry + a config-page tab. Removing
-a provider is a **purge** — see "Purge, don't deprecate" in
+A new scraper class + a `*-catalogs.ts` + `Provider`/`Prefix` enum entries +
+a settings type in `config.ts` + defaults in `manifest.ts` + a color-coded
+config-page section (`landing.html`, `landing.js`, a `style.css` accent) +
+its mirror env var with the `public.ts` injection. Removing a provider is a
+**purge** — see "Purge, don't deprecate" in
 [AGENTS.md](../AGENTS.md).
 
 ## Development notes

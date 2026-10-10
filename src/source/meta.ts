@@ -17,4 +17,5 @@ export interface ContentId {
   tmdbId?: number;
   kisskhId?: string;
   oleId?: string;
+  iyfId?: string;
 }

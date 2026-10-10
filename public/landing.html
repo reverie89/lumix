@@ -225,6 +225,108 @@
                         <div class="chip-grid" id="ole-update-more"></div>
                     </fieldset>
                 </div>
+
+                <!-- 爱壹帆 section -->
+                <div class="provider-section" id="panel-iyf" data-provider="iyf" hidden>
+                    <h4 class="provider-name">爱壹帆</h4>
+                    <fieldset class="config-group" id="iyf-mirrors-group">
+                        <legend data-i18n="apiHosts">API hosts</legend>
+                        <p class="hint" data-i18n="hostsHint">At least one required · tried top to bottom ·
+                            failed hosts are retried after 10 min</p>
+                        <ol class="order-list" id="iyf-mirror-order"></ol>
+                        <p class="hint" id="iyf-mirror-more-label" hidden data-i18n="moreHosts">More hosts · tap to add as a fallback</p>
+                        <div class="chip-grid" id="iyf-mirror-more"></div>
+                        <div class="mirror-add">
+                            <input type="text" id="iyf-mirror-input" placeholder="{{IYF_HOST}}"
+                                autocomplete="off" inputmode="url" aria-label="Add a custom API host URL"
+                                data-i18n-aria="hostInputAria">
+                            <button type="button" class="paste-btn" data-target="iyf-mirror-input" data-i18n="paste">Paste</button>
+                            <button type="button" id="iyf-mirror-add-btn" class="copy-btn" data-i18n="add">Add</button>
+                        </div>
+                        <p class="hint mirror-error" id="iyf-mirror-error" role="alert" hidden></p>
+                    </fieldset>
+
+                    <!-- Tiers: an ordered pick list per tier — the row order (and the
+                       group order above) is the catalog order Stremio displays -->
+                    <fieldset class="config-group" data-tier="type">
+                        <legend><span data-i18n="type">Type</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Type group up" data-i18n-aria="moveUpType">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Type group down" data-i18n-aria="moveDownType">›</button>
+                            </span>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintType">At least one tier must have picks · rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="iyf-type-order"></ol>
+                        <p class="hint" id="iyf-type-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="iyf-type-more"></div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="region">
+                        <legend><span data-i18n="region">Region</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Region group up" data-i18n-aria="moveUpRegion">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Region group down" data-i18n-aria="moveDownRegion">›</button>
+                            </span>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintRegion">At least one tier must have picks · each region adds a series and a movies catalog ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="iyf-region-order"></ol>
+                        <p class="hint" id="iyf-region-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="iyf-region-more"></div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="year">
+                        <legend><span data-i18n="year">Year</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Year group up" data-i18n-aria="moveUpYear">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Year group down" data-i18n-aria="moveDownYear">›</button>
+                            </span>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintYear">At least one tier must have picks · each year adds a series and a movies catalog ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="iyf-year-order"></ol>
+                        <p class="hint" id="iyf-year-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="iyf-year-more"></div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="quality">
+                        <legend><span data-i18n="quality">Quality</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Quality group up" data-i18n-aria="moveUpQuality">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Quality group down" data-i18n-aria="moveDownQuality">›</button>
+                            </span>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintQuality">At least one tier must have picks · each quality adds a series and a movies catalog ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="iyf-quality-order"></ol>
+                        <p class="hint" id="iyf-quality-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="iyf-quality-more"></div>
+                    </fieldset>
+
+                    <fieldset class="config-group" data-tier="sort">
+                        <legend><span data-i18n="sort">Sort</span>
+                            <span class="legend-controls">
+                                <button type="button" class="order-btn tier-move" data-action="up"
+                                    aria-label="Move the Sort group up" data-i18n-aria="moveUpSort">‹</button>
+                                <button type="button" class="order-btn tier-move" data-action="down"
+                                    aria-label="Move the Sort group down" data-i18n-aria="moveDownSort">›</button>
+                            </span>
+                        </legend>
+                        <p class="hint" data-i18n="tierHintSort">At least one tier must have picks · sort order of the selected catalogs ·
+                            rows appear in Stremio in this order</p>
+                        <ol class="order-list" id="iyf-sort-order"></ol>
+                        <p class="hint" id="iyf-sort-more-label" hidden data-i18n="more">More · tap to add</p>
+                        <div class="chip-grid" id="iyf-sort-more"></div>
+                    </fieldset>
+                </div>
             </section>
         </form>
 
@@ -255,6 +357,7 @@
     <span style="display: none;" id="defaultConfig">{{DEFAULT_CONFIG}}</span>
     <script type="application/json" id="defaultMirrors">{{DEFAULT_MIRRORS}}</script>
     <script type="application/json" id="oleDefaultMirrors">{{OLE_DEFAULT_MIRRORS}}</script>
+    <script type="application/json" id="iyfDefaultMirrors">{{IYF_DEFAULT_MIRRORS}}</script>
     <script type="application/json" id="tmdbCredit">{{TMDB_CREDIT}}</script>
     <script src="/js/landing.js?v={{JS_HASH}}"></script>
 </body>

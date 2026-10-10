@@ -6,6 +6,7 @@
 export enum Provider {
   KISSKH = "kisskh",
   OLE = "ole",
+  IYF = "iyf",
 }
 
 export enum Prefix {
@@ -13,6 +14,7 @@ export enum Prefix {
   TMDB = "tmdb",
   KISSKH = "kisskh",
   OLE = "ole",
+  IYF = "iyf",
 }
 
 export interface KisskhSettings {
@@ -34,8 +36,19 @@ export interface OleSettings {
   update: string[];
 }
 
+export interface IyfSettings {
+  mirrors: string[];
+  // Tier order (the page's tier-group order); canonical when absent
+  order?: readonly string[];
+  type: string[];
+  region: string[];
+  year: string[];
+  quality: string[];
+  sort: string[];
+}
+
 // One entry per provider tab on the config page
-export type ProviderSettings = KisskhSettings | OleSettings;
+export type ProviderSettings = KisskhSettings | OleSettings | IyfSettings;
 
 // Page + Stremio display language, picked on the config page before the
 // provider tabs. Legacy configs predate the field and read as "en".

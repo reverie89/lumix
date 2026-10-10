@@ -16,6 +16,7 @@ import ProviderService, {
 } from "../service/provider/provider-service.js";
 import { KisskhScraper } from "../source/kisskh.js";
 import { OleScraper } from "../source/ole.js";
+import { IyfScraper } from "../source/iyf.js";
 import { ContentDetail, ContentId } from "../source/meta.js";
 import { BaseProvider } from "../source/provider.js";
 import { tmdb, isTmdbEnabled, tmdbLanguage } from "../source/tmdb.js";
@@ -28,7 +29,8 @@ import { Prefix, Provider, UserConfig } from "../utils/config.js";
 
 const kisskh = new KisskhScraper(Provider.KISSKH);
 const ole = new OleScraper(Provider.OLE);
-export const providers: BaseProvider[] = [kisskh, ole];
+const iyf = new IyfScraper(Provider.IYF);
+export const providers: BaseProvider[] = [kisskh, ole, iyf];
 const logger = new Logger("ADDON");
 
 // Empty/error results are cached briefly so a dead upstream or unresolvable
@@ -98,6 +100,19 @@ const oleContentSource: ProviderContentSource = {
   },
 };
 
+const iyfContentSource: ProviderContentSource = {
+  provider: Provider.IYF,
+  idField: "iyfId",
+  async fetchDetail(externalId, config) {
+    const { title, post_Year } = await iyf.getDetail(externalId, config);
+    const extracted = extractTitle(title);
+    return {
+      title: extracted.title,
+      year: extracted.year || safeYear(post_Year),
+    };
+  },
+};
+
 async function getContent(
   args: SubtitlesHandlerArgs | CatalogHandlerArgs,
   config: UserConfig = defaultConfig,
@@ -158,6 +173,19 @@ async function getContent(
       if (!externalId) return null;
       return ProviderService.resolveProviderDetail(
         oleContentSource,
+        externalId,
+        contentType,
+        season,
+        episode,
+        config,
+      );
+    }
+    case args.id.startsWith(Prefix.IYF): {
+      // id | iyf:videoKey:season:episode
+      const [, externalId, season, episode] = args.id.split(":");
+      if (!externalId) return null;
+      return ProviderService.resolveProviderDetail(
+        iyfContentSource,
         externalId,
         contentType,
         season,

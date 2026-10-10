@@ -25,7 +25,7 @@ const logger = new Logger("PROVIDER");
  */
 export interface ProviderContentSource {
   provider: Provider;
-  idField: "kisskhId" | "oleId";
+  idField: "kisskhId" | "oleId" | "iyfId";
   fetchDetail(
     externalId: string,
     config?: UserConfig,
@@ -151,7 +151,7 @@ class ProviderService {
     type: "movie" | "series",
     contentId: ContentId,
   ) {
-    const { imdbId, tmdbId, kisskhId, oleId } = contentId;
+    const { imdbId, tmdbId, kisskhId, oleId, iyfId } = contentId;
     const hasMetaId = imdbId || tmdbId;
     if (hasMetaId) {
       const dbContentAndProvider = await getContentJoinProviderById(
@@ -172,6 +172,7 @@ class ProviderService {
     const providerIds: [Provider, string | undefined][] = [
       [Provider.KISSKH, kisskhId],
       [Provider.OLE, oleId],
+      [Provider.IYF, iyfId],
     ];
     for (const [provider, externalId] of providerIds) {
       if (!externalId) continue;
@@ -196,9 +197,9 @@ class ProviderService {
     season: number,
   ) {
     let dbContent: ContentDetail | null = null;
-    const { imdbId, tmdbId, kisskhId, oleId } = contentId;
+    const { imdbId, tmdbId, kisskhId, oleId, iyfId } = contentId;
     const id: string | undefined =
-      imdbId ?? tmdbId?.toString() ?? kisskhId ?? oleId;
+      imdbId ?? tmdbId?.toString() ?? kisskhId ?? oleId ?? iyfId;
     if (!id) return null;
     const dbContentAndProvider = await ProviderService.getContentAndProvider(
       type,
@@ -231,6 +232,7 @@ class ProviderService {
       }
     }
     if (oleId) dbContent.oleId = oleId;
+    if (iyfId) dbContent.iyfId = iyfId;
     dbProviderContent.forEach((providerContent) => {
       const extractedTitle = extractTitle(providerContent.title);
       const extractedSeason = extractedTitle.season ?? 1;
@@ -248,6 +250,13 @@ class ProviderService {
         extractedSeason === season
       ) {
         dbContent.oleId = providerContent.externalId;
+      }
+      if (
+        providerContent.provider === Provider.IYF &&
+        !iyfId &&
+        extractedSeason === season
+      ) {
+        dbContent.iyfId = providerContent.externalId;
       }
     });
     return dbContent;

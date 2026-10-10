@@ -9,6 +9,7 @@ import {
 import pkg from "../../package.json" with { type: "json" };
 import type {
   ConfigLanguage,
+  IyfSettings,
   KisskhSettings,
   OleSettings,
   UserConfig,
@@ -22,6 +23,10 @@ import {
   expandOleCatalogs,
   OLE_HIDDEN_CATALOGS,
 } from "../source/ole-catalogs.js";
+import {
+  expandIyfCatalogs,
+  IYF_HIDDEN_CATALOGS,
+} from "../source/iyf-catalogs.js";
 import {
   MANIFEST_DESCRIPTION_ZH,
   PROVIDER_LABELS,
@@ -54,12 +59,29 @@ const defaultOleSettings: OleSettings = {
   update: [],
 };
 
+const defaultIyfSettings: IyfSettings = {
+  mirrors: [],
+  order: ["type", "region", "year", "quality", "sort"],
+  type: ["TVSeries", "Movies"],
+  region: ["Chinese", "Hongkong", "Taiwanese", "Japanese", "Korean"],
+  year: [],
+  quality: [],
+  sort: [],
+};
+
 // kisskh first, then 欧乐 — the same shape normalizeConfig produces for a
 // decoded config carrying both providers (hidden search rows close each
-// provider's block).
+// provider's block). iyf's settings ride along so a fresh config page and a
+// re-added iyf provider seed from them, but iyf stays OUT of the default
+// catalog/stream lists: it is opt-in until the user adds it on the page, so
+// the unconfigured manifest (and default traffic) never scrape it.
 export const defaultConfig: UserConfig = {
   language: "en",
-  providers: { kisskh: defaultKisskhSettings, ole: defaultOleSettings },
+  providers: {
+    kisskh: defaultKisskhSettings,
+    ole: defaultOleSettings,
+    iyf: defaultIyfSettings,
+  },
   catalogs: [
     ...expandKisskhCatalogs(defaultKisskhSettings),
     ...KISSKH_HIDDEN_CATALOGS,
@@ -122,7 +144,13 @@ const baseManifest: Manifest = {
   // whatever origin the client used (tunnel host, LAN IP, localhost), so
   // there is no single canonical origin to bake in
   logo: "",
-  idPrefixes: [Prefix.IMDB, Prefix.TMDB, Prefix.KISSKH, Prefix.OLE],
+  idPrefixes: [
+    Prefix.IMDB,
+    Prefix.TMDB,
+    Prefix.KISSKH,
+    Prefix.OLE,
+    Prefix.IYF,
+  ],
   types: ["movie", "series"],
   name: pkg.name,
   description: pkg.description,
@@ -161,7 +189,13 @@ export function buildManifest(config?: UserConfig, origin = "") {
     const metaResource: FullManifestResource = {
       name: "meta",
       types: ["movie", "series"],
-      idPrefixes: [Prefix.IMDB, Prefix.TMDB, Prefix.KISSKH, Prefix.OLE],
+      idPrefixes: [
+        Prefix.IMDB,
+        Prefix.TMDB,
+        Prefix.KISSKH,
+        Prefix.OLE,
+        Prefix.IYF,
+      ],
     };
     manifest.resources.push(metaResource);
     config.catalog.forEach((provider) => {

@@ -41,6 +41,12 @@ export const MIRROR_FAIL_TTL_MS = 10 * 60 * 1000;
 // from the config page.
 export const OLE_DEFAULT_MIRRORS = ENV.OLE_HOSTS.filter(isMirrorUrl);
 
+// iyf (爱壹帆) serves its JSON API from the m10./rankv21. subdomains of each
+// host family named in IYF_HOSTS (the site roots run byte-identical APIs)
+// and posters from static.<family>. Kept configurable
+// like the ole hosts so a rotated family can be added from the config page.
+export const IYF_DEFAULT_MIRRORS = ENV.IYF_HOSTS.filter(isMirrorUrl);
+
 // 中文 display labels for tier options. kisskh and ole share one English
 // option vocabulary (see kisskh-catalogs.ts / ole-catalogs.ts), so one
 // table serves both providers' catalog names and the config page's chips.
@@ -85,6 +91,23 @@ export const TIER_LABELS_ZH: Record<string, string> = {
   "Last Update": "最近更新",
   "Release Date": "最新上架",
   Score: "评分",
+  // iyf sort (Latest is iyf-only; Popular/Score share the ole rows)
+  Latest: "最新",
+  // iyf regions (Western/Others are iyf-only; the rest share ole's rows)
+  Western: "欧美",
+  Others: "其它",
+  // iyf year buckets
+  ThisYear: "今年",
+  LastYear: "去年",
+  Earlier: "更早",
+  Nineties: "90年代",
+  Eighties: "80年代",
+  Nostalgia: "怀旧",
+  // iyf quality buckets (labels are the upstream strings)
+  "4K": "4K",
+  "1080P": "1080P",
+  "900P": "900P",
+  "720P": "720P",
   // hidden search catalogs
   Search: "搜索",
 };
@@ -94,6 +117,7 @@ export const TIER_LABELS_ZH: Record<string, string> = {
 export const PROVIDER_LABELS: Record<string, string> = {
   kisskh: "kisskh",
   ole: "欧乐",
+  iyf: "爱壹帆",
 };
 
 export const MANIFEST_DESCRIPTION_ZH = "在线观看电视剧、电影、综艺、动漫与短剧";

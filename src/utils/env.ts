@@ -40,6 +40,9 @@ const envSchema = z.object({
   // config page's mirror rows and used when a config carries no mirrors
   KISSKH_MIRRORS: stringList,
   OLE_HOSTS: stringList,
+  // iyf (爱壹帆) API host families — the scraper derives m10./rankv21./static.
+  // subdomains from each entry (the site root serves m10.<family> etc.)
+  IYF_HOSTS: stringList,
 
   // Server configuration
   // Rate-limit keys come from x-forwarded-for/cf-connecting-ip; set false to

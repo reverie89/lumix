@@ -5,6 +5,12 @@ import {
   KISSKH_DEFAULT_MIRRORS,
   OLE_DEFAULT_MIRRORS,
 } from "../../utils/constant.js";
+import {
+  IYF_HIDDEN_CATALOGS,
+} from "../../source/iyf-catalogs.js";
+import {
+  OLE_HIDDEN_CATALOGS,
+} from "../../source/ole-catalogs.js";
 import { decodeConfig, getResourceLimitResponse } from "./stremio.js";
 
 const encode = (value: unknown) =>
@@ -286,8 +292,46 @@ describe("decodeConfig", () => {
     expect(config.catalog).toEqual([Provider.KISSKH]);
     expect(config.stream).toEqual([Provider.KISSKH]);
   });
-});
 
+  it("normalizes iyf tiers and appends the hidden search rows", () => {
+    const config = decodeConfig(
+      encode({
+        order: ["iyf"],
+        providers: {
+          iyf: {
+            mirrors: ["https://iyf.test"],
+            type: ["TVSeries", "Bogus"],
+            region: ["Chinese", "Atlantis"],
+            year: ["ThisYear"],
+            quality: ["8K"],
+            sort: ["Popular"],
+          },
+        },
+      }),
+    );
+    expect(config.providers.iyf).toEqual({
+      mirrors: ["https://iyf.test"],
+      order: ["type", "region", "year", "quality", "sort"],
+      type: ["TVSeries"],
+      region: ["Chinese"],
+      year: ["ThisYear"],
+      quality: [],
+      sort: ["Popular"],
+    });
+    expect(config.catalog).toEqual([Provider.IYF]);
+    expect(config.catalogs).toEqual([
+      "iyf.series.TVSeries",
+      "iyf.series.Chinese",
+      "iyf.movie.Chinese",
+      "iyf.series.ThisYear",
+      "iyf.movie.ThisYear",
+      "iyf.series.Popular",
+      "iyf.movie.Popular",
+      ...IYF_HIDDEN_CATALOGS,
+    ]);
+  });
+
+});
 describe("getResourceLimitResponse", () => {
   it("returns an empty subtitle list instead of a placeholder track", () => {
     // A placeholder track would be parsed as a real subtitle by players

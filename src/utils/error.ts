@@ -18,6 +18,8 @@ enum ErrorName {
   KISSKH_TOKEN = "[KISSKH] Token Error",
   // OLE
   OLE_DETAIL = "[OLE] Detail Error",
+  // IYF
+  IYF_DETAIL = "[IYF] Detail Error",
 }
 
 // Channel-tagged errors: each class prefixes its ErrorName to the message so
@@ -38,6 +40,7 @@ export const KisskhDetailError = namedError(ErrorName.KISSKH_DETAIL);
 export const KisskhEpisodeError = namedError(ErrorName.KISSKH_EPISODE);
 export const KisskhTokenError = namedError(ErrorName.KISSKH_TOKEN);
 export const OleDetailError = namedError(ErrorName.OLE_DETAIL);
+export const IyfDetailError = namedError(ErrorName.IYF_DETAIL);
 
 export function handleError(
   error: Error | any,
@@ -52,6 +55,7 @@ export function handleError(
     case error instanceof KisskhDetailError:
     case error instanceof KisskhEpisodeError:
     case error instanceof OleDetailError:
+    case error instanceof IyfDetailError:
       logger.warn(`${message} | ${error.message}`);
       return error;
     case error instanceof KisskhTokenError:

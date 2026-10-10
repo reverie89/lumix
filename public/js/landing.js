@@ -114,12 +114,18 @@ const STRINGS = {
     region: "Region",
     status: "Status",
     sort: "Sort",
+    year: "Year",
+    quality: "Quality",
     tierHintType:
       "At least one tier must have picks · rows appear in Stremio in this order",
     tierHintRegion:
       "At least one tier must have picks · each region adds a series and a movies catalog · rows appear in Stremio in this order",
     tierHintStatus:
       "At least one tier must have picks · applies to series · rows appear in Stremio in this order",
+    tierHintYear:
+      "At least one tier must have picks · each year adds a series and a movies catalog · rows appear in Stremio in this order",
+    tierHintQuality:
+      "At least one tier must have picks · each quality adds a series and a movies catalog · rows appear in Stremio in this order",
     tierHintSort:
       "At least one tier must have picks · sort order of the selected catalogs · rows appear in Stremio in this order",
     installApp: "Install Stremio",
@@ -145,6 +151,10 @@ const STRINGS = {
     moveDownStatus: "Move the Status group down",
     moveUpSort: "Move the Sort group up",
     moveDownSort: "Move the Sort group down",
+    moveUpYear: "Move the Year group up",
+    moveDownYear: "Move the Year group down",
+    moveUpQuality: "Move the Quality group up",
+    moveDownQuality: "Move the Quality group down",
     moveUp: (label) => `Move ${label} up`,
     moveDown: (label) => `Move ${label} down`,
     remove: (label) => `Remove ${label}`,
@@ -173,12 +183,18 @@ const STRINGS = {
     region: "地区",
     status: "状态",
     sort: "排序",
+    year: "年份",
+    quality: "画质",
     tierHintType:
       "至少在一个分组中选择选项 · 目录行按此顺序显示在 Stremio 中",
     tierHintRegion:
       "至少在一个分组中选择选项 · 每个地区会添加剧集和电影两个目录 · 目录行按此顺序显示在 Stremio 中",
     tierHintStatus:
       "至少在一个分组中选择选项 · 仅作用于剧集 · 目录行按此顺序显示在 Stremio 中",
+    tierHintYear:
+      "至少在一个分组中选择选项 · 每个年份会添加剧集和电影两个目录 · 目录行按此顺序显示在 Stremio 中",
+    tierHintQuality:
+      "至少在一个分组中选择选项 · 每个画质会添加剧集和电影两个目录 · 目录行按此顺序显示在 Stremio 中",
     tierHintSort:
       "至少在一个分组中选择选项 · 所选目录的排列方式 · 目录行按此顺序显示在 Stremio 中",
     installApp: "安装 Stremio",
@@ -204,6 +220,10 @@ const STRINGS = {
     moveDownStatus: "下移状态分组",
     moveUpSort: "上移排序分组",
     moveDownSort: "下移排序分组",
+    moveUpYear: "上移年份分组",
+    moveDownYear: "下移年份分组",
+    moveUpQuality: "上移画质分组",
+    moveDownQuality: "下移画质分组",
     moveUp: (label) => `上移 ${label}`,
     moveDown: (label) => `下移 ${label}`,
     remove: (label) => `移除 ${label}`,
@@ -273,10 +293,11 @@ document.querySelectorAll(".paste-btn").forEach((btn) => {
 
 // One provider entry: its panel, tier fieldsets, default mirrors, and its
 // own mirror widget state. A new provider adds a PROVIDERS entry + panel.
-const PROVIDERS = ["kisskh", "ole"];
+const PROVIDERS = ["kisskh", "ole", "iyf"];
 const PROVIDER_TIERS = {
   kisskh: ["type", "region", "status", "update"],
   ole: ["type", "region", "update"],
+  iyf: ["type", "region", "year", "quality", "sort"],
 };
 
 // Tier options in canonical order. Values are the server's option names (the
@@ -326,6 +347,23 @@ const TIER_OPTIONS = {
     ],
     update: ["Popular", "Last Update", "Score", "Release Date"],
   },
+  iyf: {
+    type: ["TVSeries", "Movies", "Variety", "Anime", "ShortDrama"],
+    region: [
+      "Chinese",
+      "Hongkong",
+      "Taiwanese",
+      "Japanese",
+      "Korean",
+      "Western",
+      "UK",
+      "Thai",
+      "Others",
+    ],
+    year: ["ThisYear", "LastYear", "Earlier", "Nineties", "Eighties", "Nostalgia"],
+    quality: ["4K", "1080P", "900P", "720P"],
+    sort: ["Popular", "Score", "Latest"],
+  },
 };
 // Values whose chip text differs from the config value
 const OPTION_LABELS = {
@@ -333,6 +371,17 @@ const OPTION_LABELS = {
   US: "United States",
   UK: "United Kingdom",
   ShortDrama: "Short Drama",
+  Western: "Western",
+  Others: "Others",
+  ThisYear: "This Year",
+  LastYear: "Last Year",
+  Earlier: "Earlier",
+  Nineties: "90s",
+  Eighties: "80s",
+  Nostalgia: "Nostalgic",
+  Popular: "Popular",
+  Score: "Score",
+  Latest: "Latest",
 };
 // 中文 chip text, mirroring TIER_LABELS_ZH in src/utils/constant.ts (the
 // same labels name the catalogs in Stremio) — a category change updates both
@@ -372,22 +421,36 @@ const OPTION_LABELS_ZH = {
   "Last Update": "最近更新",
   "Release Date": "最新上架",
   Score: "评分",
+  Latest: "最新",
+  Western: "欧美",
+  Others: "其它",
+  ThisYear: "今年",
+  LastYear: "去年",
+  Earlier: "更早",
+  Nineties: "90年代",
+  Eighties: "80年代",
+  Nostalgia: "怀旧",
+  "4K": "4K",
+  "1080P": "1080P",
+  "900P": "900P",
+  "720P": "720P",
 };
 const optionLabel = (value) =>
   language === "zh"
     ? (OPTION_LABELS_ZH[value] ?? value)
     : (OPTION_LABELS[value] ?? value);
-const PROVIDER_LABELS = { kisskh: "kisskh", ole: "欧乐" };
+const PROVIDER_LABELS = { kisskh: "kisskh", ole: "欧乐", iyf: "爱壹帆" };
 
 const DEFAULT_MIRRORS = {
   kisskh: JSON.parse(document.getElementById("defaultMirrors").textContent),
   ole: JSON.parse(
     document.getElementById("oleDefaultMirrors").textContent,
   ),
+  iyf: JSON.parse(document.getElementById("iyfDefaultMirrors").textContent),
 };
-// Both providers start on a fresh page; the provider list's ✕ and the
-// tap-to-add chips remove and re-add them
-const FRESH_ENABLED = { kisskh: true, ole: true };
+// kisskh and 欧乐 start on a fresh page; 爱壹帆 is opt-in — its chip adds it,
+// the ✕ and the chip remove and re-add it
+const FRESH_ENABLED = { kisskh: true, ole: true, iyf: false };
 
 function el(tag, className) {
   const node = document.createElement(tag);
