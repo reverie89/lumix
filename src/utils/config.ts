@@ -17,6 +17,15 @@ export enum Prefix {
   IYF = "iyf",
 }
 
+// Catalog ids (and the meta/stream ids built from them) carry their provider
+// as a "<provider>." prefix, so a path can be attributed to a provider. The
+// config segment is base64url (no dots), so on a request path the prefix only
+// matches resource ids — shared by the per-provider catalog rate limit and
+// the visit log.
+export const providerIdPrefix = new RegExp(
+  `(${Object.values(Provider).join("|")})\\.`,
+);
+
 export interface KisskhSettings {
   mirrors: string[];
   // Tier order (the page's tier-group order); canonical when absent

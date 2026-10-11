@@ -54,6 +54,10 @@ const envSchema = z.object({
   RETRY_JITTER_MS: z.coerce.number().min(0).default(500),
   // Cache warming
   WARM_CACHE: booleanFlag(true),
+  // Internal visits dashboard: a second listener bound to INTERNAL_HOST.
+  // Nothing is exposed while it is unset — no dashboard and no visit logging
+  INTERNAL_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  INTERNAL_HOST: z.string().default("127.0.0.1"),
   // Rate limit. Catalog counts per provider per IP (each provider's boards
   // scroll independently); the rest are per IP
   CATALOG_WINDOW_MINUTES: z.coerce.number().min(1).default(10),

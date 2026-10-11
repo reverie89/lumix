@@ -116,6 +116,27 @@ its mirror env var with the `public.ts` injection. Removing a provider is a
 **purge** — see "Purge, don't deprecate" in
 [AGENTS.md](../AGENTS.md).
 
+## Visit log and internal dashboard
+
+Setting `INTERNAL_PORT` opens a second listener (`INTERNAL_HOST`, default
+`127.0.0.1`) serving `public/stats.html` through its own router
+(`src/api/router/internal.ts`) — summary cards, a 14-day bar chart and a
+live feed. That env var is also the visit log's switch: the `visitLog`
+middleware on the main app (`src/api/middleware/visit-log.ts`) classifies
+every request (landing / manifest / catalog / meta / stream / subtitle,
+provider from the `providerIdPrefix` id rule), writes one `visit` row and
+emits it to an in-process bus; `GET /events` on the internal router streams
+the bus as SSE (heartbeat keep-alive, `EventSource` auto-reconnect). Only
+salted hashes are stored — `ip_hash` rotates daily (same-day dedup only)
+and `config_hash` per config; the salt lives in the `meta` table. Static
+assets, the warm-cache's own boot requests (`x-lumix-warm` header) and
+unrecognized paths are never logged, and rows older than 30 days are
+pruned at startup next to `pruneExpiredRows`. With `INTERNAL_PORT` unset
+there is no second listener and nothing is logged. The chart library is
+the Chart.js UMD build vendored at `public/vendor/chart.umd.js` (its
+`LICENSE.md` sits next to it) — the internal page loads nothing from the
+internet. The public config-page stack is untouched.
+
 ## Development notes
 
 - The sqlite database lives at `./data/lumix.db` (gitignored, hardcoded —

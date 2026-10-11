@@ -70,6 +70,12 @@ services:
       ## Retry jitter | 500
       - RETRY_JITTER_MS=
 
+      ## Bind address of the internal listener. Docker: set 0.0.0.0 inside the container and publish the port to the host loopback only | 127.0.0.1
+      - INTERNAL_HOST=
+      # Internal visits dashboard (a second, loopback-only listener; also switches the visit log)
+      ## Port for the dashboard; empty keeps it off | off
+      - INTERNAL_PORT=
+
       # Rate limit
       ## Catalog window minutes / request limit per provider | 10 / 200
       - CATALOG_WINDOW_MINUTES=
@@ -125,8 +131,13 @@ docker run -d \
 Every env var is optional; `TMDB_API_KEY` enables TMDB artwork/description
 enrichment and can be left empty.
 The other values are optional with the default value written after | e.g. default `MIN_MATCHING_SCORE` is 75.
-The server always listens on port 55913; the database lives at `./data/lumix.db`
-(volume-mount `/app/data` in Docker to persist it).
+The public server always listens on port 55913; the database lives at
+`./data/lumix.db` (volume-mount `/app/data` in Docker to persist it).
+Setting `INTERNAL_PORT` opens a second listener for the operator-only
+visits dashboard and enables the visit log behind it — never publish that
+port publicly; in Docker map it from the host loopback
+(`-p 127.0.0.1:55914:55914`, with `INTERNAL_HOST=0.0.0.0` in the container)
+or reach a remote host over an SSH tunnel instead.
 Example [env file](.env.example)
 
 ## Development

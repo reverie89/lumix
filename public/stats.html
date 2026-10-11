@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>lumix · visits</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" type="image/svg+xml" href="/img/lumix.svg">
+    <link rel="stylesheet" href="/css/style.css?v={{CSS_HASH}}">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Title -->
+        <header id="title">
+            <div class="brand">
+                <span class="brand-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M8.58 5.25H10.93A1.31 1.31 0 0 1 12.24 6.56V17.44A1.31 1.31 0 0 1 10.93 18.75H8.58A1.31 1.31 0 0 1 7.27 17.44V6.56A1.31 1.31 0 0 1 8.58 5.25Z" />
+                        <path d="M9.14 12.3 16.73 15.53 9.14 18.75Z" />
+                    </svg>
+                </span>
+                <h1>lumix</h1>
+                <span class="version">v{{VERSION}}</span>
+            </div>
+            <p class="tagline">Visits dashboard — internal, served on the loopback interface.</p>
+        </header>
+
+        <!-- Summary cards -->
+        <section class="stats">
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <p class="stat-label">Manifest loads</p>
+                    <p class="stat-value" id="stat-manifest-today">–</p>
+                    <p class="stat-sub">today</p>
+                    <p class="stat-sub" id="stat-manifest-week">&nbsp;</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-label">Landing views</p>
+                    <p class="stat-value" id="stat-landing-today">–</p>
+                    <p class="stat-sub">today</p>
+                    <p class="stat-sub" id="stat-landing-week">&nbsp;</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-label">Unique visitors</p>
+                    <p class="stat-value" id="stat-unique">–</p>
+                    <p class="stat-sub">today</p>
+                    <p class="stat-sub">per-day count only</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-label">Distinct installs</p>
+                    <p class="stat-value" id="stat-installs">–</p>
+                    <p class="stat-sub">today</p>
+                    <p class="stat-sub">per config hash</p>
+                </div>
+            </div>
+
+            <!-- 14-day manifest trend -->
+            <div class="stats-block">
+                <h3>Manifest loads · last 14 days</h3>
+                <div class="chart-wrap">
+                    <canvas id="dailyChart" role="img"
+                        aria-label="Bar chart of manifest loads per day over the last 14 days"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent + live feed -->
+            <div class="stats-block">
+                <div class="stats-heading">
+                    <h3>Recent activity <span class="live-dot" id="liveDot" title="Live feed status"></span></h3>
+                    <button type="button" class="btn btn-secondary refresh-btn" id="refreshBtn">Refresh</button>
+                </div>
+                <table class="visit-table">
+                    <thead>
+                        <tr>
+                            <th>time</th>
+                            <th>kind</th>
+                            <th>provider</th>
+                            <th>client</th>
+                            <th>status</th>
+                            <th>ms</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script type="application/json" id="visitData">{{VISIT_DATA}}</script>
+    <script src="/vendor/chart.umd.js"></script>
+    <script src="/js/stats.js?v={{JS_HASH}}"></script>
+</body>
+
+</html>

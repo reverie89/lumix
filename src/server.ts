@@ -1,8 +1,10 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import internalRouter from "./api/router/internal.js";
 import publicRouter from "./api/router/public.js";
 import stremio from "./api/router/stremio.js";
+import { visitLog } from "./api/middleware/visit-log.js";
 import { closeSqlite } from "./db/sqlite.js";
 import { initMigrations } from "./db/drizzle.js";
 import { buildManifest } from "./lib/manifest.js";
@@ -42,14 +44,17 @@ async function warmCache() {
   const chunkSize = 3;
   for (let i = 0; i < warmUrls.length; i += chunkSize) {
     const chunk = warmUrls.slice(i, i + chunkSize);
-    const results = await Promise.allSettled(
-      chunk.map(async (url) => {
-        // 127.0.0.1, not localhost: the name may resolve to ::1, which a
-        // 0.0.0.0 bind does not cover
-        const response = await fetch(`http://127.0.0.1:${PORT}${url}`);
-        await response.arrayBuffer();
-      }),
-    );
+      const results = await Promise.allSettled(
+        chunk.map(async (url) => {
+          // 127.0.0.1, not localhost: the name may resolve to ::1, which a
+          // 0.0.0.0 bind does not cover. The marker header keeps the boot's
+          // own traffic out of the visit log
+          const response = await fetch(`http://127.0.0.1:${PORT}${url}`, {
+            headers: { "x-lumix-warm": "1" },
+          });
+          await response.arrayBuffer();
+        }),
+      );
     failures += results.filter((r) => r.status === "rejected").length;
   }
   if (failures > 0) {
@@ -59,6 +64,9 @@ async function warmCache() {
 
 const app = new Hono();
 app.use("*", cors());
+// Visit logging rides the INTERNAL_PORT switch — off means no dashboard and
+// no log rows (see visitLog)
+app.use("*", visitLog());
 app.route("/", stremio);
 app.route("/", publicRouter);
 
@@ -75,6 +83,23 @@ try {
   serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
     logger.log(`${APP_NAME} running on http://${HOST}:${PORT}`);
   });
+  if (ENV.INTERNAL_PORT) {
+    // Loopback-bound by default (INTERNAL_HOST): the dashboard exists only
+    // for the operator — Docker deployments publish the port from the host
+    // loopback only (see README)
+    serve(
+      {
+        fetch: internalRouter.fetch,
+        port: ENV.INTERNAL_PORT,
+        hostname: ENV.INTERNAL_HOST,
+      },
+      () => {
+        logger.log(
+          `Internal dashboard on http://${ENV.INTERNAL_HOST}:${ENV.INTERNAL_PORT}`,
+        );
+      },
+    );
+  }
   if (ENV.WARM_CACHE) {
     await warmCache();
     logger.log(`Warming cache completed`);

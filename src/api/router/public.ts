@@ -1,8 +1,5 @@
 import { serveStatic } from "@hono/node-server/serve-static";
-import crypto from "crypto";
-import fs from "fs";
 import { Hono } from "hono";
-import path from "path";
 import { defaultConfig } from "../../lib/manifest.js";
 import { ENV } from "../../utils/env.js";
 import {
@@ -11,10 +8,9 @@ import {
   OLE_DEFAULT_MIRRORS,
 } from "../../utils/constant.js";
 import { APP_VERSION } from "../../utils/version.js";
+import { assetHash, renderTemplate } from "./template.js";
 
 const publicRouter = new Hono();
-const rootDir = process.cwd();
-const publicDir = path.join(rootDir, "public");
 
 // Placeholder host for the config page's mirror input — derived from
 // the default so it can't drift when the default host rotates (an empty
@@ -26,56 +22,32 @@ const iyfHost = IYF_DEFAULT_MIRRORS[0]
   ? new URL(IYF_DEFAULT_MIRRORS[0]).hostname
   : "";
 
-// Asset URLs are fingerprinted with a content hash: Cloudflare's edge
-// caches /js and /css past the origin TTL, so a redeploy can pair fresh
-// HTML with yesterday's landing.js and break the config page. Changing the
-// URL on every content change orphans the stale edge entry.
-const assetHash = (relativePath: string): string => {
-  try {
-    return crypto
-      .createHash("sha1")
-      .update(fs.readFileSync(path.join(publicDir, relativePath)))
-      .digest("hex")
-      .slice(0, 10);
-  } catch {
-    return "0";
-  }
-};
-
 // Serve custom landing page at root
 let cachedLandingHtml: string | null = null;
 const getLandingPage = () => {
   if (cachedLandingHtml) return cachedLandingHtml;
-  const filePath = path.join(publicDir, "landing.html");
-  if (!fs.existsSync(filePath)) return null;
-  cachedLandingHtml = fs
-    .readFileSync(filePath, "utf8")
-    .replace("{{VERSION}}", APP_VERSION)
-    .replace("{{DEFAULT_CONFIG}}", JSON.stringify(defaultConfig))
-    .replace("{{DEFAULT_MIRRORS}}", JSON.stringify(KISSKH_DEFAULT_MIRRORS))
-    .replace(
-      "{{OLE_DEFAULT_MIRRORS}}",
-      JSON.stringify(OLE_DEFAULT_MIRRORS),
-    )
-    .replace("{{IYF_DEFAULT_MIRRORS}}", JSON.stringify(IYF_DEFAULT_MIRRORS))
+  const html = renderTemplate("landing.html", {
+    VERSION: APP_VERSION,
+    DEFAULT_CONFIG: JSON.stringify(defaultConfig),
+    DEFAULT_MIRRORS: JSON.stringify(KISSKH_DEFAULT_MIRRORS),
+    OLE_DEFAULT_MIRRORS: JSON.stringify(OLE_DEFAULT_MIRRORS),
+    IYF_DEFAULT_MIRRORS: JSON.stringify(IYF_DEFAULT_MIRRORS),
     // The mirror input's placeholder tracks the default host (see oleHost)
-    .replace("{{OLE_HOST}}", oleHost)
-    .replace("{{IYF_HOST}}", iyfHost)
+    OLE_HOST: oleHost,
+    IYF_HOST: iyfHost,
     // The tagline only credits TMDB on deployments that actually enrich with
     // it; both languages' credit text ships as one payload the page appends
     // to its (localized) tagline
-    .replace(
-      "{{TMDB_CREDIT}}",
-      JSON.stringify(
-        ENV.TMDB_API_KEY
-          ? { en: " Metadata provided by TMDB.", zh: " 元数据由 TMDB 提供。" }
-          : { en: "", zh: "" },
-      ),
-    )
-    .replace("{{CSS_HASH}}", assetHash("css/style.css"))
-    .replace("{{JS_HASH}}", assetHash("js/landing.js"));
-
-  return cachedLandingHtml;
+    TMDB_CREDIT: JSON.stringify(
+      ENV.TMDB_API_KEY
+        ? { en: " Metadata provided by TMDB.", zh: " 元数据由 TMDB 提供。" }
+        : { en: "", zh: "" },
+    ),
+    CSS_HASH: assetHash("css/style.css"),
+    JS_HASH: assetHash("js/landing.js"),
+  });
+  if (html) cachedLandingHtml = html;
+  return html;
 };
 
 // Public static file

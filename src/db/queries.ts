@@ -1,5 +1,14 @@
 import type { ContentType } from "@stremio-addon/sdk";
-import { and, count, eq, sql } from "drizzle-orm";
+import { createHash, randomBytes } from "crypto";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  isNotNull,
+  sql,
+} from "drizzle-orm";
 import type { ContentDetail } from "../source/meta.js";
 import { isExpired } from "../utils/cache.js";
 import { handleError } from "../utils/error.js";
@@ -14,6 +23,8 @@ import {
 import { stream, StreamInsert } from "./schema/stream.js";
 import { ESubtitleInsert, subtitle } from "./schema/subtitle.js";
 import { ESearchMissInsert, searchMiss } from "./schema/search_miss.js";
+import { meta } from "./schema/meta.js";
+import { visit, type EVisitInsert, type VisitKind } from "./schema/visit.js";
 
 const logger = new Logger("DB");
 
@@ -383,4 +394,185 @@ export async function getSearchMiss(title: string, type: "movie" | "series") {
     handleError(e, logger, `Failed to read search miss ${title}`);
     return undefined;
   }
+}
+
+// META (key/value)
+/**
+ * Read a meta row or create it with `make` on first use. The re-read after
+ * the conflict-tolerant insert returns the surviving value, so concurrent
+ * first calls converge on one row.
+ */
+export async function getOrCreateMeta(
+  key: string,
+  make: () => string,
+): Promise<string> {
+  const read = () =>
+    db
+      .select({ value: meta.value })
+      .from(meta)
+      .where(eq(meta.key, key))
+      .limit(1)
+      .then((rows) => rows[0]?.value);
+  const existing = await read();
+  if (existing !== undefined) return existing;
+  await db.insert(meta).values({ key, value: make() }).onConflictDoNothing();
+  const written = await read();
+  if (written === undefined) throw new Error(`Failed to persist meta ${key}`);
+  return written;
+}
+
+// VISIT LOG
+export type VisitKindCounts = Record<VisitKind, number>;
+
+export interface VisitSummary {
+  /** Request counts since local midnight, per kind */
+  today: VisitKindCounts;
+  /** Request counts over the last 7 days, per kind */
+  week: VisitKindCounts;
+  /** Distinct ip_hash values since local midnight (same-day dedup only) */
+  uniqueToday: number;
+  /** Distinct config_hash values since local midnight */
+  installsToday: number;
+  /** Manifest loads per local day, oldest first, zero-filled 14 days */
+  daily: { day: string; count: number }[];
+  /** Latest rows, newest first — display fields only */
+  recent: {
+    ts: number;
+    kind: VisitKind;
+    provider: string | null;
+    client: string | null;
+    status: number;
+    durationMs: number;
+  }[];
+}
+
+const VISIT_KINDS: VisitKind[] = [
+  "landing",
+  "manifest",
+  "catalog",
+  "meta",
+  "stream",
+  "subtitle",
+];
+
+// Visit rows feed the dashboard's counts and recent feed only — 30 days is
+// plenty and keeps the table bounded (pruned at startup, below)
+const VISIT_RETENTION_DAYS = 30;
+
+const DAILY_CHART_DAYS = 14;
+
+export async function insertVisit(row: EVisitInsert) {
+  try {
+    await db.insert(visit).values(row);
+  } catch (e) {
+    handleError(e, logger, "Failed to insert visit row");
+  }
+}
+
+export async function pruneVisits() {
+  const cutoff = Date.now() - VISIT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  try {
+    const result = await db.run(sql`DELETE FROM ${visit} WHERE ts < ${cutoff}`);
+    const removed = Number(result.changes ?? 0);
+    if (removed > 0) {
+      logger.log(
+        `Pruned ${removed} visit rows older than ${VISIT_RETENTION_DAYS} days`,
+      );
+    }
+  } catch (e) {
+    handleError(e, logger, "Failed to prune visit rows");
+  }
+}
+
+const localMidnight = (): Date => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return start;
+};
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+const localDayKey = (d: Date): string =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+const kindCounts = async (since: Date): Promise<VisitKindCounts> => {
+  const rows = await db
+    .select({ kind: visit.kind, n: count(visit.id) })
+    .from(visit)
+    .where(gte(visit.ts, since))
+    .groupBy(visit.kind);
+  const out = Object.fromEntries(
+    VISIT_KINDS.map((kind) => [kind, 0]),
+  ) as VisitKindCounts;
+  for (const row of rows) out[row.kind] = Number(row.n);
+  return out;
+};
+
+const distinctCount = async (
+  column: typeof visit.ipHash,
+  since: Date,
+): Promise<number> => {
+  const [row] = await db
+    .select({ n: sql<number>`count(distinct ${column})` })
+    .from(visit)
+    .where(and(gte(visit.ts, since), isNotNull(column)));
+  return Number(row?.n ?? 0);
+};
+
+/**
+ * The internal dashboard's read model: per-kind counts (today/week), the
+ * 14-day manifest trend, distinct-visitor/installs for today and the
+ * latest rows for the recent feed.
+ */
+export async function getVisitSummary(): Promise<VisitSummary> {
+  const midnight = localMidnight();
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const fortnightAgo = new Date(Date.now() - DAILY_CHART_DAYS * 24 * 60 * 60 * 1000);
+
+  const [today, week, uniqueToday, installsToday, dailyRows, recent] =
+    await Promise.all([
+      kindCounts(midnight),
+      kindCounts(weekAgo),
+      distinctCount(visit.ipHash, midnight),
+      distinctCount(visit.configHash, midnight),
+      db
+        .select({
+          day: sql<string>`strftime('%Y-%m-%d', ${visit.ts} / 1000, 'unixepoch', 'localtime')`,
+          n: count(visit.id),
+        })
+        .from(visit)
+        .where(and(eq(visit.kind, "manifest"), gte(visit.ts, fortnightAgo)))
+        .groupBy(sql`strftime('%Y-%m-%d', ${visit.ts} / 1000, 'unixepoch', 'localtime')`),
+      db
+        .select({
+          ts: visit.ts,
+          kind: visit.kind,
+          provider: visit.provider,
+          client: visit.client,
+          status: visit.status,
+          durationMs: visit.durationMs,
+        })
+        .from(visit)
+        .orderBy(desc(visit.ts))
+        .limit(50),
+    ]);
+
+  const byDay = new Map(dailyRows.map((row) => [row.day, Number(row.n)]));
+  const daily: { day: string; count: number }[] = [];
+  for (let i = DAILY_CHART_DAYS - 1; i >= 0; i--) {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - i);
+    const key = localDayKey(day);
+    daily.push({ day: key, count: byDay.get(key) ?? 0 });
+  }
+
+  return {
+    today,
+    week,
+    uniqueToday,
+    installsToday,
+    daily,
+    recent: recent.map((row) => ({ ...row, ts: row.ts.getTime() })),
+  };
 }

@@ -528,3 +528,114 @@ p:first-child {
   width: 1.2rem;
   height: 1.2rem;
 }
+
+/* Internal visits dashboard (stats.html, served by the loopback listener);
+   same tokens and card language as the config page */
+.stats {
+  background: var(--secondary-background);
+  border: 1px solid var(--border);
+  border-radius: var(--rounded-lg);
+  padding: var(--md);
+  margin-top: var(--md);
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--xs);
+}
+.stat-card {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--rounded-md);
+  padding: var(--sm);
+}
+.stat-label {
+  color: var(--secondary-foreground);
+  font-size: 0.95rem;
+}
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: var(--xxs);
+}
+.stat-sub {
+  color: var(--secondary-foreground);
+  font-size: 0.9rem;
+  margin-top: 0;
+}
+.stats-block {
+  margin-top: var(--md);
+}
+.chart-wrap {
+  height: 12rem;
+  margin-top: var(--xs);
+}
+.stats-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sm);
+}
+.stats-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--xs);
+}
+.refresh-btn {
+  flex: 0 0 auto;
+  margin-top: 0;
+  min-height: 44px;
+  font-size: 1rem;
+  padding: 0 var(--md);
+}
+.live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  display: inline-block;
+}
+/* Connected state: the palette's green (the 欧乐 hue doubles as "ok") */
+.live-dot.on {
+  background: var(--ole-accent);
+}
+.visit-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--xs);
+}
+.visit-table th {
+  text-align: left;
+  color: var(--secondary-foreground);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: var(--xxs);
+  border-bottom: 1px solid var(--border);
+}
+.visit-table td {
+  padding: var(--xxs);
+  border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 50%);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+.visit-table tr:last-child td {
+  border-bottom: 0;
+}
+.visit-table tbody:empty::after {
+  content: "No visits logged yet.";
+  display: block;
+  padding: var(--sm) 0;
+  color: var(--secondary-foreground);
+}
+.visit-error {
+  color: var(--danger);
+}
+.provider-tag.kisskh {
+  color: var(--kisskh-accent);
+}
+.provider-tag.ole {
+  color: var(--ole-accent);
+}
+.provider-tag.iyf {
+  color: var(--iyf-accent);
+}

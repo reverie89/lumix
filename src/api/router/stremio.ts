@@ -25,6 +25,7 @@ import {
   Provider,
   ProviderSettings,
   UserConfig,
+  providerIdPrefix,
 } from "../../utils/config.js";
 import { getSubtitleVtt } from "../../source/kisskh-subtitle.js";
 import {
@@ -73,11 +74,7 @@ const getName = () => `⏱️${SHORT_NAME}\nRate Limit`;
 // Catalog requests are provider-scoped by id ("kisskh.series.Korean"), so the
 // catalog budget splits per provider per IP — scrolling one provider's boards
 // can't starve the other. Meta/stream/subtitles stay one budget per IP:
-// imdb/tmdb ids resolve against every provider in a single request. Config
-// segments are base64url (no dots), so "<provider>." only matches catalog ids.
-const providerIdPrefix = new RegExp(
-  `(${Object.values(Provider).join("|")})\\.`,
-);
+// imdb/tmdb ids resolve against every provider in a single request.
 export const limiterKey = (
   resource: ShortManifestResource,
   ip: string,
