@@ -186,6 +186,11 @@ export function buildManifest(config?: UserConfig, origin = "") {
   manifest.catalogs = [...baseManifest.catalogs];
   manifest.description =
     config.language === "zh" ? MANIFEST_DESCRIPTION_ZH : APP_DESCRIPTION;
+  const providerLabels = Object.keys(config.providers).map(
+    (provider) => PROVIDER_LABELS[provider] ?? provider,
+  );
+  if (providerLabels.length > 0)
+    manifest.name = `${APP_NAME} / ${providerLabels.join(" | ")}`;
   const catalogMap = buildCatalogMap(config.catalogs, config.language);
   if (config.catalog && config.catalog.length > 0) {
     manifest.resources.push("catalog");

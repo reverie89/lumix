@@ -92,7 +92,15 @@ interface Episode {
 }
 interface StreamResponse {
   Video: string;
+  Type?: number;
   [key: string]: any;
+}
+
+// kisskh lists unaired episodes; their stream endpoint answers 200 with a
+// countdown widget instead of media, marked Type 2. Type 1 — series and
+// movies alike — is the only observed shape carrying a playable stream.
+function isPlayableStream(stream: StreamResponse): boolean {
+  return typeof stream.Type !== "number" || stream.Type === 1;
 }
 interface SubResponse {
   src: string;
@@ -413,6 +421,7 @@ export class KisskhScraper extends BaseProvider {
     const stream = await this._getStream(episodeId, token, config);
     if (!stream) return [];
     if (!stream.Video) return [];
+    if (!isPlayableStream(stream)) return [];
     const url = this._fixUrl(stream.Video);
     // Handle rate limit
     if (stream.Video.includes(RATE_LIMIT_DESCRIPTION))

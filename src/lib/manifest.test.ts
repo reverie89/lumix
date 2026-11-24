@@ -26,6 +26,26 @@ describe("buildManifest logo", () => {
   });
 });
 
+describe("buildManifest name", () => {
+  const only = (...keys: string[]): UserConfig => ({
+    ...defaultConfig,
+    providers: Object.fromEntries(
+      keys.map((key) => [key, defaultConfig.providers[key]!]),
+    ),
+  });
+
+  it("lists the selected providers after the app name", () => {
+    expect(buildManifest(only("kisskh")).name).toBe("lumix / kisskh");
+    expect(buildManifest(only("kisskh", "iyf")).name).toBe(
+      "lumix / kisskh | 爱壹帆",
+    );
+  });
+
+  it("lists every provider in the default manifest", () => {
+    expect(buildManifest().name).toBe("lumix / kisskh | 欧乐 | 爱壹帆");
+  });
+});
+
 describe("defaultConfig", () => {
   it("pins the default kisskh tiers and order", () => {
     const kisskh = defaultConfig.providers.kisskh as KisskhSettings;
