@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-24
+
+### Added
+
+- visit logging and an internal live dashboard — `INTERNAL_PORT` opens a stats listener (bind address `INTERNAL_HOST`, loopback by default) and enables the visit log; only salted hashes are stored, no raw IPs or URLs
+
+### Changed
+
+- manifest name — a config-scoped manifest lists the selected providers after the app name (`lumix / kisskh | 欧乐`)
+- dependencies bumped within their ranges
+
+### Fixed
+
+- kisskh unaired episodes — their stream endpoint answers with a countdown widget (`Type` 2) instead of media; it is no longer returned as a playable stream
+
 ## [0.3.0] - 2026-10-10
 
 ### Added
@@ -64,7 +79,8 @@ Initial release of **lumix** — a Stremio addon that streams dramas, series and
 - optional outbound proxies — Webshare rotating proxy for kisskh, Mediaflow-style wrapper for TMDB and subtitles
 - Docker deployment — Dockerfile, docker-compose.yaml and a CI workflow publishing the image to ghcr.io; the server always listens on port 55913
 
-[unreleased]: https://github.com/reverie89/lumix/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/reverie89/lumix/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/reverie89/lumix/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/reverie89/lumix/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/reverie89/lumix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/reverie89/lumix/compare/v0.1.0...v0.2.0
